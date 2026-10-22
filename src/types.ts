@@ -173,22 +173,6 @@ export interface Result {
   error?: string;
 }
 
-export const LIMITS = {
-  postMax: 500,
-  commentMax: 300,
-  bioMax: 160,
-  displayNameMax: 50,
-  usernamePattern: /^[a-zA-Z0-9_]{3,20}$/,
-  imagesPerPost: 4,
-  imagesPerComment: 2,
-  imageMaxBytes: 5 * 1024 * 1024,
-  videoMaxBytes: 10 * 1024 * 1024,
-  videoMaxSeconds: 60,
-  dmMax: 1000,
-  storyCaptionMax: 200,
-  hashtagsPerPost: 10,
-  hashtagMaxLen: 30,
-  linksPerPost: 3,
-  feedPageSize: 20,
-  storyTtlMs: 24 * 60 * 60 * 1000,
-} as const;
+// All limits live in one config file (TRD §6.6) — re-exported here so the
+// existing `import { LIMITS } from '../types'` call sites keep working.
+export { LIMITS } from './config/limits';

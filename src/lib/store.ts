@@ -37,7 +37,7 @@ import { LIMITS } from '../types';
 import { avatarFor, countLinks, extractHashtags, svgImage } from './format';
 import { deleteVideo } from './media';
 import { checkLimit } from './rateLimit';
-import { friendlyError, realBackend, supabase, uploadImages, uploadRef } from './supabase';
+import { friendlyError, realBackend, supabase, deleteMediaUrls, uploadImages, uploadRef } from './supabase';
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 
 export type { Result };
@@ -1786,11 +1786,13 @@ class SupabaseProvider implements DataProvider {
       const { error } = await this.sb.from('posts').update({ deleted_at: deletedAt }).eq('id', postId);
       if (error) return { ok: false, error: friendlyError(error) };
       this.commit({ posts: this.state.posts.map((p) => (p.id === postId ? { ...p, deletedAt } : p)) });
+      void deleteMediaUrls([...post.imageUrls, post.videoUrl]); // QTA-04: no orphans
       return { ok: true };
     }
     // Admin moderation removes the row outright (RLS delete policy allows admins).
     const { error } = await this.sb.from('posts').delete().eq('id', postId);
     if (error) return { ok: false, error: friendlyError(error) };
+    void deleteMediaUrls([...post.imageUrls, post.videoUrl]); // QTA-04: no orphans
     this.commit({
       posts: this.state.posts.filter((p) => p.id !== postId),
       comments: this.state.comments.filter((c) => c.postId !== postId),
@@ -2136,6 +2138,7 @@ class SupabaseProvider implements DataProvider {
     if (story.userId !== this.state.session!.id && this.me()?.role !== 'admin') return { ok: false, error: 'Not allowed.' };
     const { error } = await this.sb.from('stories').delete().eq('id', storyId);
     if (error) return { ok: false, error: friendlyError(error) };
+    void deleteMediaUrls([story.media]); // QTA-04: no orphans
     this.commit({ stories: this.state.stories.filter((s) => s.id !== storyId) });
     return { ok: true };
   }

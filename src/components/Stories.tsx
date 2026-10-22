@@ -6,6 +6,7 @@ import type { Story } from '../types';
 import { LIMITS } from '../types';
 import { timeAgo } from '../lib/format';
 import { putVideo, validateVideo } from '../lib/media';
+import { compressImage, formatBytes } from '../lib/compress';
 import { activeStories, currentUserProfile, useActions, useAppState } from '../lib/store';
 import Avatar from './Avatar';
 import { toast } from './Toast';
@@ -175,11 +176,14 @@ export function StoryComposer({ onClose }: { onClose: () => void }) {
     setBusy(true);
     try {
       if (want === 'image') {
-        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return toast('Photos must be JPEG, PNG, or WebP.', 'error');
-        if (file.size > LIMITS.imageMaxBytes) return toast('Photos must be under 5 MB.', 'error');
-        const url = await resizeImage(file);
-        setMedia(url);
-        setKind('image');
+        try {
+          const out = await compressImage(file, { maxEdge: LIMITS.storyImageMaxEdgePx });
+          setMedia(out.dataUrl);
+          setKind('image');
+          toast(`Photo ${formatBytes(out.beforeBytes)} → ${formatBytes(out.afterBytes)}`, 'success');
+        } catch (e) {
+          return toast(e instanceof Error ? e.message : 'Could not read that photo.', 'error');
+        }
       } else {
         const check = await validateVideo(file);
         if (!check.ok) return toast(check.error, 'error');
@@ -257,7 +261,7 @@ export function StoryComposer({ onClose }: { onClose: () => void }) {
                 className="grid h-40 w-full place-items-center rounded-xl border border-dashed border-white/20 text-sm text-slate-500 hover:border-brand-500 hover:text-brand-600"
               >
                 <Plus size={22} />
-                {kind === 'image' ? 'Pick a photo' : 'Pick a video (≤60s)'}
+                {kind === 'image' ? 'Pick a photo' : `Pick a video (≤${LIMITS.videoMaxSeconds}s, ≤${Math.round(LIMITS.videoMaxBytes / 1048576)} MB)`}
               </button>
             )}
             <input
@@ -281,17 +285,6 @@ export function StoryComposer({ onClose }: { onClose: () => void }) {
     </div>,
     document.body,
   );
-}
-
-async function resizeImage(file: File): Promise<string> {
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, 1080 / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
-  return canvas.toDataURL('image/jpeg', 0.82);
 }
 
 /* ------------------------------------------------------------------ bar */

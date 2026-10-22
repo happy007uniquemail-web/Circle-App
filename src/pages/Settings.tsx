@@ -57,6 +57,7 @@ export default function Settings() {
             value={avatarUrl ? [avatarUrl] : []}
             onChange={(urls) => setAvatarUrl(urls[0] ?? '')}
             max={1}
+            maxEdge={LIMITS.avatarMaxEdgePx}
             label="Change photo"
           />
         </div>

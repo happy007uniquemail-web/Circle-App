@@ -99,7 +99,7 @@ export default function PostComposer() {
               )}
               <label
                 className={`cursor-pointer rounded-full p-2 transition ${video ? 'text-slate-300' : 'text-brand-600 hover:bg-brand-50'}`}
-                title={video ? 'Remove the video to add photos' : 'Attach a video (≤60s, ≤10 MB)'}
+                title={video ? 'Remove the video to add photos' : `Attach a video (≤${LIMITS.videoMaxSeconds}s, ≤${Math.round(LIMITS.videoMaxBytes / 1048576)} MB)`}
               >
                 <Film size={18} />
                 <input

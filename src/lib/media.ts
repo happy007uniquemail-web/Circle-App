@@ -3,6 +3,8 @@
  * Videos live in IndexedDB — only a `vid:<id>` key goes into the app state, so
  * localStorage stays small and the quota-safe persistence path is untouched.
  */
+import { LIMITS } from '../config/limits';
+import { formatBytes } from './compress';
 
 const DB_NAME = 'circle-media';
 const STORE = 'blobs';
@@ -86,26 +88,68 @@ export function isVideoRef(ref: string | null | undefined): boolean {
   return !!ref && ref.startsWith(PREFIX);
 }
 
+/** VID-05: container signature check — `....ftyp` (MP4/MOV) or EBML (WebM). */
+async function sniffVideoKind(file: File): Promise<'iso' | 'webm' | null> {
+  try {
+    const head = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+    if (head.length >= 12 && head[4] === 0x66 && head[5] === 0x74 && head[6] === 0x79 && head[7] === 0x70) return 'iso';
+    if (head.length >= 4 && head[0] === 0x1a && head[1] === 0x45 && head[2] === 0xdf && head[3] === 0xa3) return 'webm';
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Client-side video validation (F-SAF): container type, size, and duration
- * probed from metadata before anything is accepted.
+ * Client-side video validation (TRD D): container type + magic bytes (VID-05),
+ * byte size (VID-02), duration (VID-01), resolution (VID-03) and derived
+ * bitrate (VID-04) — probed before anything is accepted. The `media` bucket's
+ * `file_size_limit` (50 MB) re-checks server-side (VID-07).
  */
 export async function validateVideo(file: File): Promise<{ ok: true; duration: number } | { ok: false; error: string }> {
   const allowed = ['video/mp4', 'video/webm', 'video/quicktime'];
   if (!allowed.includes(file.type)) return { ok: false, error: 'Videos must be MP4, WebM, or MOV.' };
-  if (file.size > 10 * 1024 * 1024) return { ok: false, error: 'Videos must be 10 MB or smaller.' };
+
+  const kind = await sniffVideoKind(file);
+  if (!kind) return { ok: false, error: 'That file does not look like a real video — re-export it as MP4.' };
+  if ((kind === 'webm') !== (file.type === 'video/webm')) {
+    return { ok: false, error: `Contents do not match the file type — re-export it as ${kind === 'webm' ? 'WebM' : 'MP4'}.` };
+  }
+
+  if (file.size > LIMITS.videoMaxBytes) {
+    return {
+      ok: false,
+      error: `Videos must be ${Math.round(LIMITS.videoMaxBytes / 1048576)} MB or smaller (this one is ${formatBytes(file.size)}).`,
+    };
+  }
+
   const url = URL.createObjectURL(file);
   try {
-    const duration = await new Promise<number>((resolve, reject) => {
+    const { duration, width, height } = await new Promise<{ duration: number; width: number; height: number }>((resolve, reject) => {
       const v = document.createElement('video');
       v.preload = 'metadata';
-      v.onloadedmetadata = () => resolve(v.duration);
+      v.onloadedmetadata = () => resolve({ duration: v.duration, width: v.videoWidth, height: v.videoHeight });
       v.onerror = () => reject(new Error('unreadable'));
       v.src = url;
       setTimeout(() => reject(new Error('timeout')), 8000);
     });
     if (!isFinite(duration) || duration < 0.5) return { ok: false, error: 'Video is empty or unreadable.' };
-    if (duration > 60) return { ok: false, error: 'Videos must be 60 seconds or shorter.' };
+    if (duration > LIMITS.videoMaxSeconds) {
+      return { ok: false, error: `Videos must be ${LIMITS.videoMaxSeconds} seconds or shorter.` };
+    }
+    if (Math.min(width, height) > LIMITS.videoMaxShortSidePx) {
+      return {
+        ok: false,
+        error: `Video is ${width}×${height} — max is ${LIMITS.videoMaxShortSidePx}p. Export at 1080p or lower.`,
+      };
+    }
+    const mbps = (file.size * 8) / (duration * 1_000_000);
+    if (mbps > LIMITS.videoMaxBitrateMbps) {
+      return {
+        ok: false,
+        error: `Bitrate ${mbps.toFixed(1)} Mbps exceeds the ${LIMITS.videoMaxBitrateMbps} Mbps limit — shorten or re-export the clip.`,
+      };
+    }
     return { ok: true, duration };
   } catch {
     return { ok: false, error: 'Could not read that video — try re-exporting as MP4.' };

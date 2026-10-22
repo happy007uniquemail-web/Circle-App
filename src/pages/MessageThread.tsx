@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { LIMITS } from '../types';
 import { timeAgo } from '../lib/format';
 import { putVideo, validateVideo } from '../lib/media';
+import { compressImage, formatBytes } from '../lib/compress';
 import { profileById, threadMessages, useActions, useAppState } from '../lib/store';
 import Avatar from '../components/Avatar';
 import RichText from '../components/RichText';
@@ -58,17 +59,14 @@ export default function MessageThread() {
 
   async function attachPhoto(file: File | undefined) {
     if (!file) return;
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return toast('Photos must be JPEG, PNG, or WebP.', 'error');
-    if (file.size > LIMITS.imageMaxBytes) return toast('Photos must be under 5 MB.', 'error');
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, 1000 / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    bitmap.close();
-    setVideo(null);
-    setPhoto(canvas.toDataURL('image/jpeg', 0.8));
+    try {
+      const out = await compressImage(file, { maxEdge: LIMITS.dmImageMaxEdgePx });
+      setVideo(null);
+      setPhoto(out.dataUrl);
+      toast(`Photo ${formatBytes(out.beforeBytes)} → ${formatBytes(out.afterBytes)}`, 'success');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not read that photo.', 'error');
+    }
   }
 
   async function attachVideo(file: File | undefined) {
@@ -136,7 +134,7 @@ export default function MessageThread() {
                 )}
                 <div className={`rounded-2xl px-3.5 py-2.5 text-[15px] shadow-sm ${mine ? 'rounded-br-none bg-gradient-to-r from-brand-500 to-purple-500 text-white' : 'rounded-bl-none border border-white/10 bg-white/[0.07] text-slate-800 backdrop-blur-md'}`}>
                   {m.mediaKind === 'image' && m.mediaRef && (
-                    <img src={m.mediaRef} alt="Shared photo" loading="lazy" decoding="async" className="mb-1.5 max-h-64 w-full rounded-xl object-cover" />
+                    <img src={m.mediaRef} alt="Shared photo" loading="lazy" decoding="async" width={1600} height={1200} className="mb-1.5 aspect-[4/3] max-h-64 w-full rounded-xl object-cover" />
                   )}
                   {m.mediaKind === 'video' && m.mediaRef && (
                     <div className="mb-1.5 w-64 max-w-full">

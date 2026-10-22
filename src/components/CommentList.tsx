@@ -97,7 +97,9 @@ export default function CommentList({ post }: { post: Post }) {
                           alt={`Photo ${i + 1} in comment by ${author.displayName}`}
                           loading="lazy"
                           decoding="async"
-                          className="w-full rounded-lg border border-white/10 object-cover"
+                          width={1600}
+                          height={1200}
+                          className="aspect-[4/3] w-full rounded-lg border border-white/10 object-cover"
                         />
                       ))}
                     </div>

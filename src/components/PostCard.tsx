@@ -188,7 +188,9 @@ const PostCard = ({ item, onChange }: { item: FeedItem; onChange?: () => void })
               alt={`Image ${i + 1} of post by ${author.displayName}`}
               loading="lazy"
               decoding="async"
-              className={`w-full rounded-xl border border-white/10 object-cover ${post.imageUrls.length === 1 ? 'max-h-96' : 'aspect-[4/3]'} ${
+              width={1600}
+              height={1200}
+              className={`aspect-[4/3] w-full rounded-xl border border-white/10 object-cover ${post.imageUrls.length === 1 ? 'max-h-96' : ''} ${
                 post.imageUrls.length === 3 && i === 0 ? 'col-span-2' : ''
               }`}
             />
