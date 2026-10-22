@@ -14,6 +14,7 @@ import {
   dmAllows,
   followerCount,
   followingCount,
+  interestTagsOf,
   isFollowing,
   mutedIdsFor,
   pendingRequest,
@@ -70,6 +71,9 @@ export default function Profile() {
   // PRV-04: follow lists / join date honour the owner's toggles (owner + admin always see their own).
   const showLists = isMe || me?.role === 'admin' || profile.showFollowLists !== false;
   const showJoin = isMe || me?.role === 'admin' || profile.showJoinDate !== false;
+  // INT-06: interest tags honour PRV-04's show_interests toggle (owner/admin always see their own).
+  const showTags = isMe || me?.role === 'admin' || profile.showInterest !== false;
+  const tags = showTags ? interestTagsOf(state, profile.id) : [];
   const myPosts = visiblePosts(state, me?.id ?? null).filter((p) => p.authorId === profile.id);
 
   // PRV-03: pending requests to me, shown on my own profile for approval.
@@ -136,6 +140,15 @@ export default function Profile() {
             </div>
             <p className="text-sm text-slate-500">@{profile.username}</p>
             {profile.bio && <p className="mt-2 text-[15px] leading-relaxed">{profile.bio}</p>}
+            {tags.length > 0 && (
+              <ul className="mt-2.5 flex flex-wrap gap-1.5" aria-label="Interests">
+                {tags.map((i) => (
+                  <li key={i.id} className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
+                    {i.name}
+                  </li>
+                ))}
+              </ul>
+            )}
             {showJoin && (
               <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
                 <CalendarDays size={13} /> Joined {new Date(profile.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}

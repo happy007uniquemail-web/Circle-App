@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { Hash, TrendingUp, Users } from 'lucide-react';
 import Avatar from './Avatar';
 import FollowButton from './FollowButton';
-import { currentUserProfile, followerCount, mutedIdsFor, trendingHashtags, useAppState } from '../lib/store';
+import { currentUserProfile, followerCount, mutedIdsFor, sharedInterestCount, trendingHashtags, useAppState } from '../lib/store';
 
 /**
  * Desktop right rail (BLK-05): secondary content that would otherwise be
@@ -20,7 +20,9 @@ export default function SidePanel() {
   const suggested = state.profiles
     .filter((p) => p.id !== me?.id && !following.has(p.id) && !blocked.has(p.id) && !muted.has(p.id) && !p.isSuspended)
     .filter((p) => p.discoverable !== false) // PRV-09: non-discoverable excluded from suggestions
-    .sort((a, b) => followerCount(state, b.id) - followerCount(state, a.id))
+    // INT-07: shared interests outrank raw follower count; ties fall back to popularity.
+    .map((p) => ({ p, overlap: me ? sharedInterestCount(state, me.id, p.id) : 0 }))
+    .sort((a, b) => b.overlap - a.overlap || followerCount(state, b.p.id) - followerCount(state, a.p.id))
     .slice(0, 3);
 
   return (
@@ -31,7 +33,7 @@ export default function SidePanel() {
             <Users size={15} className="text-brand-600" aria-hidden /> To follow
           </h2>
           <ul className="mt-3 space-y-3">
-            {suggested.map((p) => (
+            {suggested.map(({ p, overlap }) => (
               <li key={p.id} className="flex items-center gap-2.5">
                 <Link to={`/u/${p.username}`} className="shrink-0" aria-label={`${p.displayName}'s profile`}>
                   <Avatar src={p.avatarUrl} name={p.displayName} size={36} />
@@ -40,7 +42,14 @@ export default function SidePanel() {
                   <Link to={`/u/${p.username}`} className="block truncate text-sm font-semibold hover:underline">
                     {p.displayName}
                   </Link>
-                  <p className="truncate text-xs text-slate-500">@{p.username}</p>
+                  <p className="truncate text-xs text-slate-500">
+                    @{p.username}
+                    {overlap > 0 && (
+                      <span className="ml-1.5 font-medium text-brand-600">
+                        · {overlap} {overlap === 1 ? 'interest' : 'interests'} in common
+                      </span>
+                    )}
+                  </p>
                 </div>
                 <FollowButton userId={p.id} compactLabel />
               </li>

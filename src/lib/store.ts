@@ -19,6 +19,7 @@ import type {
   FeedItem,
   FeedPage,
   Follow,
+  Interest,
   LikeRow,
   MediaKind,
   Message,
@@ -34,6 +35,7 @@ import type {
   Save,
   SessionUser,
   Story,
+  UserInterest,
 } from '../types';
 import { LIMITS } from '../types';
 import { avatarFor, countLinks, extractHashtags, svgImage } from './format';
@@ -92,6 +94,8 @@ export interface DataProvider {
   /** PRV-08: mute/unmute a user's content in my feeds. */
   muteUser(userId: string): MaybePromise<Result>;
   unmuteUser(userId: string): MaybePromise<Result>;
+  /** INT-03/05: replace my interest picks (min 3 is the onboarding rule; max 10 is DB-enforced). */
+  setInterests(ids: string[]): MaybePromise<Result>;
   /** PRV-01/04/05/06/09: instant-save privacy settings. */
   updatePrivacy(input: PrivacyInput): MaybePromise<Result>;
   submitReport(targetType: ReportTarget, targetId: string, reason: ReportReason, details: string | null): MaybePromise<Result>;
@@ -136,6 +140,54 @@ const SEED_PEOPLE: Array<Omit<Profile, 'avatarUrl' | 'createdAt'>> = [
 ];
 
 const IMG = (label: string, from: string, to: string) => svgImage(label, from, to);
+
+/** INT-01: demo copy of the curated catalog (mirrors the 0007 seed list). */
+const SEED_INTERESTS: Interest[] = (
+  [
+    ['Art', ['Drawing', 'Painting', 'Photography', 'Sculpture']],
+    ['Music', ['Indie', 'Hip-hop', 'Classical', 'Live music']],
+    ['Tech', ['Web dev', 'AI', 'Gadgets', 'Open source']],
+    ['Sports', ['Football', 'Basketball', 'Running', 'Swimming']],
+    ['Books', ['Fiction', 'Fantasy', 'Non-fiction', 'Poetry']],
+    ['Gaming', ['PC gaming', 'Console gaming', 'Board games', 'Esports']],
+    ['Travel', ['Backpacking', 'Road trips', 'City breaks', 'Hiking']],
+    ['Food', ['Baking', 'Coffee', 'Vegan cooking', 'Street food']],
+    ['Science', ['Space', 'Biology', 'Physics', 'Environment']],
+    ['Fitness', ['Yoga', 'Weightlifting', 'Cycling', 'Climbing']],
+    ['Movies', ['Sci-fi', 'Drama', 'Horror', 'Animation']],
+    ['Learning', ['Languages', 'History', 'Psychology', 'Finance']],
+  ] as const
+).flatMap(([category, names]) =>
+  names.map((name) => ({
+    id: `int_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+    slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    name,
+    category,
+    isActive: true,
+  })),
+);
+const IID = (name: string) => `int_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`;
+
+/** Demo persona picks so INT-07 suggestions have someone to match against. */
+const SEED_PICKS: ReadonlyArray<[string, string[]]> = [
+  ['p_maya', ['Drawing', 'Photography', 'Web dev', 'Fiction']],
+  ['p_omar', ['Photography', 'Web dev', 'Road trips', 'Cycling']],
+  ['p_lena', ['Running', 'Hiking', 'Baking', 'Photography']],
+  ['p_sam', ['Web dev', 'Open source', 'AI', 'Board games']],
+  ['p_ari', ['Indie', 'Live music', 'Classical', 'Animation']],
+  ['p_nina', ['Painting', 'Fiction', 'Coffee', 'Poetry']],
+  ['p_dev', ['Fiction', 'History', 'Physics', 'Non-fiction']],
+  ['p_zoe', ['Environment', 'Biology', 'Street food', 'Photography']],
+];
+
+/** Flattened demo selections (used by the seed + migrateV2 fill for old states). */
+const SEED_USER_INTERESTS: UserInterest[] = SEED_PICKS.flatMap(([userId, names]) =>
+  names.map((name) => ({
+    userId,
+    interestId: IID(name),
+    createdAt: new Date(Date.now() - 48 * HOUR).toISOString(),
+  })),
+);
 
 const SEED_POSTS: Array<{ a: number; body: string; h: number; imgs?: string[] }> = [
   { a: 1, body: 'Spent the morning redesigning an onboarding flow. Friction hides in the tiniest fields — one fewer input can lift completion dramatically. #design #ux', h: 2, imgs: [IMG('Onboarding sketches', '#6366f1', '#ec4899')] },
@@ -286,6 +338,8 @@ function buildSeed(): AppState {
     { userId: 'p_you', postId: 'seed_post_2', createdAt: new Date(Date.now() - 6 * HOUR).toISOString() },
   ];
 
+  const userInterests: UserInterest[] = SEED_USER_INTERESTS;
+
   return {
     session: null,
     profiles,
@@ -302,6 +356,8 @@ function buildSeed(): AppState {
     conversations,
     messages,
     mutedNotifications: [],
+    interests: SEED_INTERESTS, // INT-01 (demo copy of the 0007 seed)
+    userInterests, // INT-02 — demo personas have picks so INT-07 has matches
     extrasV2: true,
   };
 }
@@ -315,6 +371,9 @@ function migrateV2(state: AppState): AppState {
     stories: state.stories ?? [],
     conversations: state.conversations ?? [],
     messages: state.messages ?? [],
+    // INT-01/02: pre-interest states get the demo catalog + persona picks.
+    interests: state.interests ?? SEED_INTERESTS,
+    userInterests: state.userInterests ?? SEED_USER_INTERESTS,
     // v1 rows → v2 shapes (fill fields that didn't exist in v1)
     posts: (state.posts ?? []).map((p) => ({
       ...p,
@@ -391,6 +450,63 @@ export function dmAllows(state: AppState, viewerId: string, otherId: string): bo
   if (perm === 'everyone') return true;
   if (perm === 'nobody') return false;
   return isFollowing(state, viewerId, otherId);
+}
+
+/* ------------------------------------------------ interests (INT-01 … INT-07) */
+
+/** INT-01: the curated catalog this build ships with. */
+export function interestCatalog(state: AppState): Interest[] {
+  return state.interests ?? [];
+}
+
+/** INT-02: interest ids this person picked. */
+export function interestsOf(state: AppState, userId: string): string[] {
+  return (state.userInterests ?? [])
+    .filter((ui) => ui.userId === userId)
+    .map((ui) => ui.interestId);
+}
+
+/** INT-06: catalog rows for a person's picks (UI respects show_interests). */
+export function interestTagsOf(state: AppState, userId: string): Interest[] {
+  const picked = new Set(interestsOf(state, userId));
+  return interestCatalog(state).filter((i) => picked.has(i.id));
+}
+
+/** INT-07: how many interests two people share (suggestion score). */
+export function sharedInterestCount(state: AppState, a: string, b: string): number {
+  const theirs = new Set(interestsOf(state, b));
+  return interestsOf(state, a).filter((id) => theirs.has(id)).length;
+}
+
+/**
+ * INT-07: people ranked by shared interests, then follower count.
+ * Respects PRV-09 (discoverable), PRV-08 (mutes) and blocks; already-followed
+ * people drop out. Cabin suggestions (INT-07) land with Workstream G.
+ */
+export function suggestPeopleByInterests(state: AppState, viewerId: string, limit = 5): Profile[] {
+  const blocked = blockedIdsFor(state, viewerId);
+  const muted = mutedIdsFor(state, viewerId);
+  const following = new Set(
+    state.follows
+      .filter((f) => f.followerId === viewerId && f.status !== 'pending')
+      .map((f) => f.followingId),
+  );
+  return state.profiles
+    .filter(
+      (p) =>
+        p.username &&
+        !p.isSuspended &&
+        p.id !== viewerId &&
+        !blocked.has(p.id) &&
+        !muted.has(p.id) &&
+        !following.has(p.id) &&
+        p.discoverable !== false,
+    )
+    .map((p) => ({ p, overlap: sharedInterestCount(state, viewerId, p.id) }))
+    .filter((x) => x.overlap > 0)
+    .sort((x, y) => y.overlap - x.overlap || followerCount(state, y.p.id) - followerCount(state, x.p.id))
+    .slice(0, limit)
+    .map((x) => x.p);
 }
 
 export function currentUserProfile(state: AppState): Profile | null {
@@ -1194,6 +1310,27 @@ export class DemoProvider implements DataProvider {
     return { ok: true };
   }
 
+  setInterests(ids: string[]): Result {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const me = this.state.session!.id;
+    // Mirror of the server-side user_interests_limit trigger (0007): the demo
+    // provider enforces the same maximum so behavior matches production.
+    if (ids.length > LIMITS.interestsMax) {
+      return { ok: false, error: `You can pick at most ${LIMITS.interestsMax} interests.` };
+    }
+    const uniq = [...new Set(ids)];
+    const catalog = new Set((this.state.interests ?? []).map((i) => i.id));
+    if (uniq.some((id) => !catalog.has(id))) return { ok: false, error: 'Unknown interest.' };
+    this.commit({
+      userInterests: [
+        ...(this.state.userInterests ?? []).filter((ui) => ui.userId !== me),
+        ...uniq.map((interestId) => ({ userId: me, interestId, createdAt: now() })),
+      ],
+    });
+    return { ok: true };
+  }
+
   updatePrivacy(input: PrivacyInput): Result {
     const guard = this.requireAuth();
     if (!guard.ok) return guard;
@@ -1205,6 +1342,7 @@ export class DemoProvider implements DataProvider {
     if (input.dmPermission !== undefined) patch.dmPermission = input.dmPermission;
     if (input.cabinInvitePermission !== undefined) patch.cabinInvitePermission = input.cabinInvitePermission;
     if (input.discoverable !== undefined) patch.discoverable = input.discoverable;
+    if (input.showInterest !== undefined) patch.showInterest = input.showInterest; // INT-06 (PRV-04)
     this.commit({ profiles: this.state.profiles.map((p) => (p.id === me ? { ...p, ...patch } : p)) });
     return { ok: true };
   }
@@ -1500,6 +1638,7 @@ const mapProfile = (r: Row): Profile => ({
   dmPermission: (r.dm_permission as Profile['dmPermission']) ?? 'everyone',
   cabinInvitePermission: (r.cabin_invite_permission as Profile['cabinInvitePermission']) ?? 'everyone',
   discoverable: r.discoverable !== false,
+  showInterest: r.show_interests !== false, // INT-06 (PRV-04)
 });
 const mapPost = (r: Row): Post => ({
   id: rs(r.id),
@@ -1534,6 +1673,20 @@ const mapFollow = (r: Row): Follow => ({
 const mapMute = (r: Row): Mute => ({
   muterId: rs(r.muter_id),
   mutedId: rs(r.muted_id),
+  createdAt: rAt(r.created_at),
+});
+
+const mapInterest = (r: Row): Interest => ({
+  id: rs(r.id),
+  slug: rs(r.slug),
+  name: rs(r.name),
+  category: rs(r.category),
+  isActive: r.is_active !== false,
+});
+
+const mapUserInterest = (r: Row): UserInterest => ({
+  userId: rs(r.user_id),
+  interestId: rs(r.interest_id),
   createdAt: rAt(r.created_at),
 });
 const mapSave = (r: Row): Save => ({ userId: rs(r.user_id), postId: rs(r.post_id), createdAt: rAt(r.created_at) });
@@ -1649,7 +1802,7 @@ class SupabaseProvider implements DataProvider {
       return (data as Row[]) ?? [];
     };
     try {
-      const [profiles, posts, comments, follows, likes, saves, reposts, blocks, mutes, stories, notifications, reports, conversations, prefs] =
+      const [profiles, posts, comments, follows, likes, saves, reposts, blocks, mutes, stories, notifications, reports, conversations, prefs, interestRows, userInterestRows] =
         await Promise.all([
           rows(sb.from('profiles').select('*').limit(5000)),
           rows(sb.from('posts').select('*').order('created_at', { ascending: false }).limit(1000)),
@@ -1665,6 +1818,8 @@ class SupabaseProvider implements DataProvider {
           rows(sb.from('reports').select('*').order('created_at', { ascending: false }).limit(500)),
           rows(sb.from('conversations').select('*').order('created_at', { ascending: false }).limit(500)),
           rows(sb.from('notification_prefs').select('*').eq('user_id', uid).limit(1)),
+          rows(sb.from('interests').select('*').limit(200)), // INT-01
+          rows(sb.from('user_interests').select('*').limit(5000)), // INT-02 (pairs are non-sensitive; PRV-04 governs display)
         ]);
       const convIds = conversations.map((c) => rs(c.id));
       const [memberRows, messageRows]: [Row[], Row[]] = convIds.length
@@ -1691,6 +1846,8 @@ class SupabaseProvider implements DataProvider {
         reposts: reposts.map(mapRepost),
         blocks: blocks.map(mapBlock),
         mutes: mutes.map(mapMute),
+        interests: interestRows.map(mapInterest), // INT-01
+        userInterests: userInterestRows.map(mapUserInterest), // INT-02
         stories: stories.map(mapStory),
         notifications: notifications.map(mapNotif),
         mutedNotifications: (prefs[0]?.muted_types as string[] | undefined) ?? [],
@@ -2294,6 +2451,43 @@ class SupabaseProvider implements DataProvider {
     }
   }
 
+  async setInterests(ids: string[]): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    // Mirror of the 0007 user_interests_limit trigger, checked up front so the
+    // optimistic write never travels to a row the DB would reject.
+    if (ids.length > LIMITS.interestsMax) {
+      return { ok: false, error: `You can pick at most ${LIMITS.interestsMax} interests.` };
+    }
+    const uniq = [...new Set(ids)];
+    const before = this.state;
+    const createdAt = now();
+    // Optimistic replace (INT-05: instant save); the DB is authoritative and
+    // any insert rejection rolls the snapshot back below.
+    this.commit({
+      userInterests: [
+        ...(this.state.userInterests ?? []).filter((ui) => ui.userId !== meId),
+        ...uniq.map((interestId) => ({ userId: meId, interestId, createdAt })),
+      ],
+    });
+    try {
+      const { error: delErr } = await this.sb.from('user_interests').delete().eq('user_id', meId);
+      if (delErr) throw delErr;
+      if (uniq.length) {
+        const { error } = await this.sb
+          .from('user_interests')
+          .insert(uniq.map((interest_id) => ({ user_id: meId, interest_id })));
+        if (error) throw error;
+      }
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
   async updatePrivacy(input: PrivacyInput): Promise<Result> {
     const guard = this.requireAuth();
     if (!guard.ok) return guard;
@@ -2306,6 +2500,7 @@ class SupabaseProvider implements DataProvider {
     if (input.dmPermission !== undefined) { patch.dmPermission = input.dmPermission; db.dm_permission = input.dmPermission; }
     if (input.cabinInvitePermission !== undefined) { patch.cabinInvitePermission = input.cabinInvitePermission; db.cabin_invite_permission = input.cabinInvitePermission; }
     if (input.discoverable !== undefined) { patch.discoverable = input.discoverable; db.discoverable = input.discoverable; }
+    if (input.showInterest !== undefined) { patch.showInterest = input.showInterest; db.show_interests = input.showInterest; } // INT-06
     const before = this.state;
     this.commit({ profiles: this.state.profiles.map((p) => (p.id === meId ? { ...p, ...patch } : p)) });
     try {

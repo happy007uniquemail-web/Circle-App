@@ -6,13 +6,17 @@ import Avatar from '../components/Avatar';
 import FollowButton from '../components/FollowButton';
 import { FeedSkeleton } from '../components/Skeleton';
 import StoryBar from '../components/Stories';
-import { currentUserProfile, isFollowing, selectFollowingFeed, useAppState, useDataReady } from '../lib/store';
+import { currentUserProfile, followerCount, interestsOf, isFollowing, selectFollowingFeed, sharedInterestCount, useAppState, useDataReady } from '../lib/store';
+import { LIMITS } from '../types';
 
 /** Suggested accounts — mitigates the "empty feed for new users" risk (PRD §11). */
 function SuggestedFollows({ exclude }: { exclude: string }) {
   const state = useAppState();
   const suggestions = state.profiles
     .filter((p) => p.username && p.id !== exclude && !p.isSuspended && !isFollowing(state, exclude, p.id))
+    // INT-07: people you share interests with surface first.
+    .map((p) => ({ p, overlap: sharedInterestCount(state, exclude, p.id) }))
+    .sort((a, b) => b.overlap - a.overlap || followerCount(state, b.p.id) - followerCount(state, a.p.id))
     .slice(0, 5);
 
   return (
@@ -20,7 +24,7 @@ function SuggestedFollows({ exclude }: { exclude: string }) {
       <h2 className="font-semibold">Your feed is just getting started</h2>
       <p className="mt-1 text-sm text-slate-600">Follow a few people and their newest posts show up here.</p>
       <ul className="mt-4 space-y-3">
-        {suggestions.map((p) => (
+        {suggestions.map(({ p }) => (
           <li key={p.id} className="flex items-center gap-3">
             <Link to={`/u/${p.username}`}>
               <Avatar src={p.avatarUrl} name={p.displayName} size={40} />
@@ -54,6 +58,15 @@ export default function Home() {
         <span className="text-xs font-medium text-slate-400">Following · newest first</span>
       </div>
       <StoryBar />
+      {/* INT-03: the gentle reminder promised by onboarding's Skip button. */}
+      {me && interestsOf(state, me.id).length < LIMITS.interestsMin && (
+        <div className="card flex flex-wrap items-center justify-between gap-3 border-brand-100 bg-brand-50/40 p-4">
+          <p className="text-sm text-slate-600">
+            Pick at least {LIMITS.interestsMin} interests to get better people (and cabin) suggestions.
+          </p>
+          <Link to="/settings" className="btn-primary shrink-0">Add interests</Link>
+        </div>
+      )}
       <PostComposer />
       {ready ? (
         <InfiniteFeed

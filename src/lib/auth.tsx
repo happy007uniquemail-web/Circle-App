@@ -13,7 +13,9 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   if (profile && !profile.username && location.pathname !== '/onboarding') {
     return <Navigate to="/onboarding" replace />;
   }
-  if (profile?.username && location.pathname === '/onboarding') {
+  // Step 2 (?interests) is exempt: it runs after the profile exists but must
+  // stay on the onboarding route (INT-03); skipping it just lands on /home.
+  if (profile?.username && location.pathname === '/onboarding' && !location.search.startsWith('?interests')) {
     return <Navigate to="/home" replace />;
   }
   return <>{children}</>;

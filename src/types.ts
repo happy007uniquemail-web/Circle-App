@@ -38,12 +38,30 @@ export interface Profile {
   dmPermission?: WhoCan;
   cabinInvitePermission?: WhoCan;
   discoverable?: boolean;
+  /** INT-06/PRV-04: show the interest tags on the profile. */
+  showInterest?: boolean;
 }
 
 /** Row of the N—N `mutes` table (PRV-08): muter hides muted's content. */
 export interface Mute {
   muterId: string;
   mutedId: string;
+  createdAt: string;
+}
+
+/** Catalog row of the curated `interests` table (INT-01). */
+export interface Interest {
+  id: string;
+  slug: string;
+  name: string;
+  category: string;
+  isActive: boolean;
+}
+
+/** Row of `user_interests` (INT-02): one person's pick from the catalog. */
+export interface UserInterest {
+  userId: string;
+  interestId: string;
   createdAt: string;
 }
 
@@ -55,6 +73,7 @@ export interface PrivacyInput {
   dmPermission?: WhoCan;
   cabinInvitePermission?: WhoCan;
   discoverable?: boolean;
+  showInterest?: boolean; // INT-06: interests tag visibility (PRV-04)
 }
 
 /** The signed-in session (only Google scopes: openid, email, profile — AUTH-4) */
@@ -199,6 +218,10 @@ export interface AppState {
   blocks: Block[];
   /** PRV-08: users I muted (their content is hidden from my feeds). */
   mutes?: Mute[];
+  /** INT-01: curated interest catalog (populated by seed/0007 migration). */
+  interests?: Interest[];
+  /** INT-02: everyone's interest picks (needed to match people, INT-07). */
+  userInterests?: UserInterest[];
   stories: Story[];
   notifications: AppNotification[];
   /** Muted notification types for the signed-in user (NOT-09). */

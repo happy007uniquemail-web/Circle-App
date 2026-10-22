@@ -3,9 +3,10 @@ import { LogOut, Trash2 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import Avatar from '../components/Avatar';
 import ImageUploader from '../components/ImageUploader';
+import InterestPicker from '../components/InterestPicker';
 import { toast } from '../components/Toast';
 import { avatarFor, isValidUsername, timeAgo } from '../lib/format';
-import { blockedIdsFor, currentUserProfile, profileById, useActions, useAppState } from '../lib/store';
+import { blockedIdsFor, currentUserProfile, interestsOf, profileById, useActions, useAppState } from '../lib/store';
 import { LIMITS } from '../types';
 
 /** Mute categories (NOT-09): one switch per family; notify() honours the individual types. */
@@ -29,6 +30,8 @@ export default function Settings() {
   const [bio, setBio] = useState(me?.bio ?? '');
   const [avatarUrl, setAvatarUrl] = useState(me?.avatarUrl ?? '');
   const [error, setError] = useState<string | null>(null);
+  // INT-05: local mirror for instant-save; rolled back if the write fails.
+  const [picks, setPicks] = useState<string[]>(() => (me ? interestsOf(state, me.id) : []));
 
   if (!state.session || !me) return null;
 
@@ -42,6 +45,16 @@ export default function Settings() {
     const next = allMuted ? muted.filter((t) => !types.includes(t)) : [...new Set([...muted, ...types])];
     const r = await actions.setNotificationMutes(next);
     if (!r.ok) return toast(r.error ?? 'Could not update notification settings.', 'error');
+  }
+
+  /** INT-05: every chip toggle saves instantly; failures roll back to server truth. */
+  async function savePicks(next: string[]) {
+    setPicks(next);
+    const r = await actions.setInterests(next);
+    if (!r.ok) {
+      setPicks(interestsOf(state, me!.id));
+      toast(r.error ?? 'Could not save your interests.', 'error');
+    }
   }
 
   async function save(e: FormEvent) {
@@ -116,6 +129,17 @@ export default function Settings() {
           {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
           <button type="submit" className="btn-primary">Save changes</button>
         </form>
+      </section>
+
+      {/* INT-05: interests panel — every toggle saves instantly. */}
+      <section className="card p-5" aria-labelledby="settings-interests">
+        <h2 id="settings-interests" className="font-semibold">Interests</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Tap to add or remove — changes save instantly. We match these against other people to suggest who to follow (and cabins, once you join some).
+        </p>
+        <div className="mt-3">
+          <InterestPicker value={picks} onChange={(next) => void savePicks(next)} max={LIMITS.interestsMax} />
+        </div>
       </section>
 
       <section className="card p-5">

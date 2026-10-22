@@ -152,6 +152,13 @@ export default function PrivacySettings() {
             ariaLabel="Appear in search"
             onChange={(next) => void save({ discoverable: next }, 'Could not update search setting.')}
           />
+          <SwitchRow
+            label="Interests"
+            hint="Show your interest tags on your profile"
+            checked={me.showInterest !== false}
+            ariaLabel="Show interests on profile"
+            onChange={(next) => void save({ showInterest: next }, 'Could not update interests setting.')}
+          />
         </ul>
       </section>
 

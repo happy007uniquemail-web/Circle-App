@@ -23,6 +23,12 @@ export const LIMITS = {
   feedPageSize: 20,
   storyTtlMs: 24 * 60 * 60 * 1000,
 
+  /* ··· interests (TRD §8 / INT-03) ············································ */
+  /** Minimum picks to finish onboarding's interest step (skippable). */
+  interestsMin: 3, // INTERESTS_MIN
+  /** Hard maximum; enforced server-side by user_interests_limit (0007). */
+  interestsMax: 10, // INTERESTS_MAX
+
   /* ── images (TRD §6.6) ──────────────────────────────────────────────── */
   /** Largest selectable file before compression (IMG-01). */
   imageMaxBytes: 10 * 1024 * 1024, // IMAGE_MAX_PRE_COMPRESS_MB = 10

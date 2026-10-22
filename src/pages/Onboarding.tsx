@@ -1,7 +1,9 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { CheckCircle2, Circle as CircleIcon, XCircle } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import ImageUploader from '../components/ImageUploader';
+import InterestPicker from '../components/InterestPicker';
+import { toast } from '../components/Toast';
 import { avatarFor, isValidUsername } from '../lib/format';
 import { currentUserProfile, useActions, useAppState } from '../lib/store';
 import { LIMITS } from '../types';
@@ -19,6 +21,12 @@ export default function Onboarding() {
   const [avatarUrl, setAvatarUrl] = useState(me?.avatarUrl ?? '');
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // INT-03: profile form is step 1; the interest step (3–10, skippable) is
+  // step 2 at /onboarding?interests — the auth guard exempts that URL so the
+  // completed profile doesn't bounce us to /home mid-flow.
+  const [params] = useSearchParams();
+  const step: 1 | 2 = params.has('interests') ? 2 : 1;
+  const [picks, setPicks] = useState<string[]>([]);
 
   const usernameStatus = useMemo(() => {
     const u = username.trim();
@@ -43,7 +51,58 @@ export default function Onboarding() {
       avatarUrl: avatarUrl || avatarFor(me!.id, displayName || me!.displayName),
     });
     if (!result.ok) return setError(result.error ?? 'Something went wrong.');
+    navigate('/onboarding?interests'); // INT-03: profile saved; now the (skippable) interest step
+  }
+
+  /** INT-03: min-3 is a flow rule — the picker enforces max 10, the DB enforces it too. */
+  async function savePicks() {
+    const r = await actions.setInterests(picks);
+    if (!r.ok) return toast(r.error ?? 'Could not save your interests.');
     navigate('/home', { replace: true });
+  }
+
+  // INT-03/INT-04: the interest step — skippable, with the reminder shown inline.
+  if (step === 2) {
+    return (
+      <div className="min-h-dvh">
+        <header className="mx-auto flex h-16 max-w-lg items-center gap-2 px-4">
+          <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-800 text-white shadow-md shadow-black/40">C</span>
+          <span className="font-bold">Welcome to Circle, {me.displayName.split(' ')[0]}</span>
+        </header>
+
+        <main className="mx-auto max-w-lg px-4 pb-16">
+          <div className="card p-6">
+            <h1 className="text-xl font-bold">What are you into?</h1>
+            <p className="mt-1 text-sm text-slate-600">
+              Pick at least {LIMITS.interestsMin} (up to {LIMITS.interestsMax}) — we use these to suggest people and cabins.
+            </p>
+            <div className="mt-4">
+              <InterestPicker value={picks} onChange={setPicks} min={LIMITS.interestsMin} max={LIMITS.interestsMax} />
+            </div>
+            <div className="mt-6 space-y-2">
+              <button
+                type="button"
+                onClick={() => void savePicks()}
+                disabled={picks.length < LIMITS.interestsMin}
+                className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Save &amp; continue
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/home', { replace: true })}
+                className="btn-ghost w-full"
+              >
+                Skip for now
+              </button>
+              <p className="text-center text-xs text-slate-500">
+                Skipping is fine — we&apos;ll keep a gentle reminder on Home until you&apos;ve picked at least {LIMITS.interestsMin}.
+              </p>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
   }
 
   return (
