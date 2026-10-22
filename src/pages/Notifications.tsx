@@ -1,33 +1,77 @@
-import { useEffect } from 'react';
-import { AtSign, Heart, MessageCircle, Repeat2, UserPlus } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { AtSign, Bell, HandHeart, Heart, MessageCircle, Repeat2, UserPlus, UserCheck } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AnimatedList } from '../components/AnimatedList';
 import Avatar from '../components/Avatar';
 import { ListSkeleton } from '../components/Skeleton';
 import { timeAgo } from '../lib/format';
 import { profileById, selectNotifications, useActions, useAppState, useDataReady } from '../lib/store';
+import type { AppNotification } from '../types';
 
-const ICONS = {
+const ICONS: Record<string, { Icon: typeof Heart; cls: string }> = {
   follow: { Icon: UserPlus, cls: 'bg-brand-50 text-brand-600' },
   like: { Icon: Heart, cls: 'bg-rose-50 text-rose-600' },
   comment: { Icon: MessageCircle, cls: 'bg-emerald-50 text-emerald-600' },
   repost: { Icon: Repeat2, cls: 'bg-teal-50 text-teal-600' },
-} as const;
+  mention: { Icon: AtSign, cls: 'bg-sky-50 text-sky-600' },
+  follow_request: { Icon: UserCheck, cls: 'bg-amber-50 text-amber-600' },
+  follow_request_approved: { Icon: UserCheck, cls: 'bg-emerald-50 text-emerald-600' },
+  cabin_join_request: { Icon: HandHeart, cls: 'bg-orange-50 text-orange-600' },
+  cabin_request_approved: { Icon: HandHeart, cls: 'bg-emerald-50 text-emerald-600' },
+  cabin_invite: { Icon: HandHeart, cls: 'bg-purple-50 text-purple-600' },
+};
 
 function describe(type: string): string {
-  if (type === 'follow') return 'followed you';
-  if (type === 'like') return 'liked your post';
-  if (type === 'repost') return 'reposted your post';
-  return 'commented on your post';
+  switch (type) {
+    case 'follow':
+      return 'followed you';
+    case 'like':
+      return 'liked your post';
+    case 'repost':
+      return 'reposted your post';
+    case 'comment':
+      return 'commented on your post';
+    case 'mention':
+      return 'mentioned you';
+    case 'follow_request':
+      return 'wants to follow you';
+    case 'follow_request_approved':
+      return 'approved your follow request';
+    case 'cabin_join_request':
+      return 'requested to join your cabin';
+    case 'cabin_request_approved':
+      return 'approved your cabin request';
+    case 'cabin_invite':
+      return 'invited you to a cabin';
+    default:
+      return 'interacted with you';
+  }
 }
 
-/** `/notifications` — in-app notifications + mark-as-read (NOT-1, NOT-2). */
+/** Where a tap should land, using the trigger-supplied entity context. */
+function targetFor(n: AppNotification, actorUsername: string): string {
+  const postId = n.data?.post_id ?? (n.entityType === 'post' ? n.entityId : null);
+  if (['like', 'comment', 'repost', 'mention'].includes(n.type) && postId) return `/p/${postId}`;
+  if (n.type.startsWith('cabin') && n.entityId) return `/cabins/${n.entityId}`;
+  return `/u/${actorUsername}`;
+}
+
+const PAGE = 20;
+
+function isToday(iso: string): boolean {
+  const d = new Date(iso);
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+}
+
+/** `/notifications` — grouped, paginated, entity-linked list (NOT-01…NOT-08). */
 export default function Notifications() {
   const state = useAppState();
   const actions = useActions();
   const navigate = useNavigate();
   const me = state.session?.id;
   const ready = useDataReady();
+  const [limit, setLimit] = useState(PAGE);
 
   // Visiting the page marks everything read (badge clears) — a manual
   // "Mark all as read" button is provided too.
@@ -38,8 +82,43 @@ export default function Notifications() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me]);
 
+  const items = useMemo(() => (me ? selectNotifications(state, me) : []), [state, me]);
+  const { today, earlier } = useMemo(() => {
+    const t: AppNotification[] = [];
+    const e: AppNotification[] = [];
+    for (const n of items) (isToday(n.createdAt) ? t : e).push(n);
+    return { today: t, earlier: e };
+  }, [items]);
+
   if (!me) return null;
-  const items = selectNotifications(state, me);
+
+  const visible = items.slice(0, limit);
+  const hasMore = items.length > limit;
+
+  function renderRow(n: AppNotification) {
+    const actor = profileById(state, n.actorId);
+    const { Icon, cls } = ICONS[n.type] ?? ICONS.follow!;
+    if (!actor) return null;
+    return (
+      <div key={n.id} role="listitem" className="w-full">
+        <button
+          onClick={() => navigate(targetFor(n, actor.username ?? ''))}
+          className={`card flex w-full items-center gap-3 p-4 text-left transition hover:shadow ${n.isRead ? '' : 'border-brand-100 bg-brand-50/40'}`}
+        >
+          <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${cls}`}>
+            <Icon size={16} aria-hidden />
+          </span>
+          <Avatar src={actor.avatarUrl} name={actor.displayName} size={32} />
+          <span className="min-w-0 flex-1 text-sm">
+            <b className="font-semibold">{actor.displayName}</b>{' '}
+            <span className="text-slate-600">{describe(n.type)}</span>
+            <span className="ml-1.5 text-xs text-slate-400">{timeAgo(n.createdAt)} ago</span>
+          </span>
+          {!n.isRead && <span className="h-2 w-2 shrink-0 rounded-full bg-brand-600" aria-label="unread" />}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -55,41 +134,37 @@ export default function Notifications() {
       ) : items.length === 0 ? (
         <div className="card p-8 text-center">
           <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-brand-50 text-brand-600">
-            <AtSign size={22} />
+            <Bell size={22} aria-hidden />
           </div>
           <h2 className="mt-3 font-semibold">Nothing yet</h2>
           <p className="mt-1 text-sm text-slate-600">When someone follows you, likes, or comments on your post, it shows up here.</p>
           <Link to="/explore" className="btn-primary mt-4 inline-flex">Find people</Link>
         </div>
       ) : (
-        // Motion-Primitives AnimatedList prepends items (renders newest on
-        // top), so feed it oldest-first to keep the newest-first final order.
-        <AnimatedList className="w-full gap-2" role="list" delay={120}>
-          {[...items].reverse().map((n) => {
-            const actor = profileById(state, n.actorId);
-            const { Icon, cls } = ICONS[n.type];
-            if (!actor) return null;
-            return (
-              <div key={n.id} role="listitem" className="w-full">
-                <button
-                  onClick={() => navigate(n.postId ? `/p/${n.postId}` : `/u/${actor.username}`)}
-                  className={`card flex w-full items-center gap-3 p-4 text-left transition hover:shadow ${n.readAt ? '' : 'border-brand-100 bg-brand-50/40'}`}
-                >
-                  <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${cls}`}>
-                    <Icon size={16} />
-                  </span>
-                  <Avatar src={actor.avatarUrl} name={actor.displayName} size={32} />
-                  <span className="min-w-0 flex-1 text-sm">
-                    <b className="font-semibold">{actor.displayName}</b>{' '}
-                    <span className="text-slate-600">{describe(n.type)}</span>
-                    <span className="ml-1.5 text-xs text-slate-400">{timeAgo(n.createdAt)} ago</span>
-                  </span>
-                  {!n.readAt && <span className="h-2 w-2 shrink-0 rounded-full bg-brand-600" aria-label="unread" />}
-                </button>
-              </div>
-            );
-          })}
-        </AnimatedList>
+        <div className="space-y-5">
+          {today.length > 0 && (
+            <section aria-label="Today">
+              <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Today</h2>
+              {/* AnimatedList prepends, so feed oldest-first for newest-on-top. */}
+              <AnimatedList className="w-full gap-2" role="list" delay={120}>
+                {today.slice(0, limit).reverse().map(renderRow)}
+              </AnimatedList>
+            </section>
+          )}
+          {earlier.length > 0 && (
+            <section aria-label="Earlier">
+              <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Earlier</h2>
+              <AnimatedList className="w-full gap-2" role="list" delay={120}>
+                {earlier.slice(0, Math.max(0, limit - today.length)).reverse().map(renderRow)}
+              </AnimatedList>
+            </section>
+          )}
+          {hasMore && (
+            <button onClick={() => setLimit((l) => l + PAGE)} className="btn-ghost w-full py-2.5 text-xs">
+              Load more ({items.length - visible.length} older)
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

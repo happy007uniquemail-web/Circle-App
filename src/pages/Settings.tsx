@@ -8,6 +8,15 @@ import { avatarFor, isValidUsername, timeAgo } from '../lib/format';
 import { blockedIdsFor, currentUserProfile, profileById, useActions, useAppState } from '../lib/store';
 import { LIMITS } from '../types';
 
+/** Mute categories (NOT-09): one switch per family; notify() honours the individual types. */
+const NOTIF_CATEGORIES: ReadonlyArray<{ types: string[]; label: string; hint: string }> = [
+  { types: ['like'], label: 'Likes', hint: 'When someone likes your post' },
+  { types: ['comment', 'mention'], label: 'Comments & mentions', hint: 'Comments and @mentions on your posts' },
+  { types: ['follow'], label: 'Follows', hint: 'New followers and follow requests' },
+  { types: ['repost'], label: 'Reposts', hint: 'When someone reposts your post' },
+  { types: ['cabin_invite', 'cabin_join_request', 'cabin_request_approved'], label: 'Cabins', hint: 'Cabin invites, join requests, and approvals' },
+];
+
 /** `/settings` — edit profile, manage blocks, sign out, delete account (PROF-2, MOD-3, AUTH-6). */
 export default function Settings() {
   const state = useAppState();
@@ -23,9 +32,17 @@ export default function Settings() {
 
   if (!state.session || !me) return null;
 
+  const muted = state.mutedNotifications ?? [];
   const blocked = [...blockedIdsFor(state, me.id)]
     .map((id) => profileById(state, id))
     .filter((p): p is NonNullable<typeof p> => !!p);
+
+  async function toggleMute(types: string[]) {
+    const allMuted = types.every((t) => muted.includes(t));
+    const next = allMuted ? muted.filter((t) => !types.includes(t)) : [...new Set([...muted, ...types])];
+    const r = await actions.setNotificationMutes(next);
+    if (!r.ok) return toast(r.error ?? 'Could not update notification settings.', 'error');
+  }
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -104,6 +121,35 @@ export default function Settings() {
             ))}
           </ul>
         )}
+      </section>
+
+      <section className="card p-5">
+        <h2 className="font-semibold">Notification preferences</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Muting stops new notifications of a type from being created server-side — nothing arrives and the badge stays quiet.
+        </p>
+        <ul className="mt-3 space-y-2">
+          {NOTIF_CATEGORIES.map((c) => {
+            const isMuted = c.types.every((t) => muted.includes(t));
+            return (
+              <li key={c.label} className="flex items-center justify-between rounded-xl border border-slate-100 p-3">
+                <span className="text-sm">
+                  <b className="font-semibold">{c.label}</b>
+                  <span className="block text-xs text-slate-500">{c.hint}</span>
+                </span>
+                <button
+                  role="switch"
+                  aria-checked={!isMuted}
+                  aria-label={`${isMuted ? 'Unmute' : 'Mute'} ${c.label} notifications`}
+                  onClick={() => void toggleMute(c.types)}
+                  className={`relative h-6 w-11 shrink-0 rounded-full transition ${isMuted ? 'bg-slate-300' : 'bg-brand-600'}`}
+                >
+                  <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${isMuted ? 'left-0.5' : 'left-[22px]'}`} />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       </section>
 
       <section className="card p-5">

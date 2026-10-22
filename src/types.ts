@@ -2,7 +2,17 @@
 // (supabase/migrations/0001_init.sql + 0002_features.sql)
 
 export type Role = 'user' | 'admin';
-export type NotifType = 'follow' | 'like' | 'comment' | 'repost';
+export type NotifType =
+  | 'follow'
+  | 'like'
+  | 'comment'
+  | 'repost'
+  | 'mention'
+  | 'follow_request'
+  | 'follow_request_approved'
+  | 'cabin_join_request'
+  | 'cabin_request_approved'
+  | 'cabin_invite';
 export type ReportTarget = 'post' | 'comment' | 'user';
 export type ReportReason = 'spam' | 'harassment' | 'hate' | 'nsfw' | 'other';
 export type ReportStatus = 'open' | 'dismissed' | 'actioned';
@@ -101,8 +111,12 @@ export interface AppNotification {
   recipientId: string;
   actorId: string;
   type: NotifType;
-  postId: string | null;
-  readAt: string | null;
+  /** What the notification points at: 'post' | 'comment' | 'user' | 'cabin' … */
+  entityType: string;
+  entityId: string | null;
+  /** Extra navigation context (e.g. { post_id }) supplied by the trigger. */
+  data: Record<string, string>;
+  isRead: boolean;
   createdAt: string;
 }
 
@@ -156,6 +170,8 @@ export interface AppState {
   blocks: Block[];
   stories: Story[];
   notifications: AppNotification[];
+  /** Muted notification types for the signed-in user (NOT-09). */
+  mutedNotifications: string[];
   reports: Report[];
   conversations: Conversation[];
   messages: Message[];

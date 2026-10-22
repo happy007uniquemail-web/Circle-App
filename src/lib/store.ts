@@ -87,6 +87,8 @@ export interface DataProvider {
   submitReport(targetType: ReportTarget, targetId: string, reason: ReportReason, details: string | null): MaybePromise<Result>;
   resolveReport(reportId: string, status: 'dismissed' | 'actioned'): MaybePromise<Result>;
   markNotificationsRead(): MaybePromise<Result>;
+  /** Mute/unmute notification categories for the signed-in user (NOT-09). */
+  setNotificationMutes(types: string[]): MaybePromise<Result>;
   setSuspended(userId: string, suspended: boolean): MaybePromise<Result>;
   createStory(input: StoryInput): MaybePromise<Result>;
   deleteStory(storyId: string): MaybePromise<Result>;
@@ -250,8 +252,8 @@ function buildSeed(): AppState {
     { followerId: 'p_omar', followingId: 'p_you', createdAt: new Date(Date.now() - 40 * 60_000).toISOString() },
   ];
   const notifications: AppNotification[] = [
-    { id: uid(), recipientId: 'p_you', actorId: 'p_omar', type: 'follow', postId: null, readAt: null, createdAt: new Date(Date.now() - 40 * 60_000).toISOString() },
-    { id: uid(), recipientId: 'p_you', actorId: 'p_maya', type: 'follow', postId: null, readAt: null, createdAt: new Date(Date.now() - 3 * HOUR).toISOString() },
+    { id: uid(), recipientId: 'p_you', actorId: 'p_omar', type: 'follow', entityType: 'user', entityId: 'p_omar', data: {}, isRead: false, createdAt: new Date(Date.now() - 40 * 60_000).toISOString() },
+    { id: uid(), recipientId: 'p_you', actorId: 'p_maya', type: 'follow', entityType: 'user', entityId: 'p_maya', data: {}, isRead: false, createdAt: new Date(Date.now() - 3 * HOUR).toISOString() },
   ];
 
   const stories: Story[] = [
@@ -289,6 +291,7 @@ function buildSeed(): AppState {
     reports,
     conversations,
     messages,
+    mutedNotifications: [],
     extrasV2: true,
   };
 }
@@ -546,7 +549,7 @@ export function hasSaved(state: AppState, me: string | null, postId: string): bo
   return state.saves.some((s) => s.userId === me && s.postId === postId);
 }
 export function unreadCount(state: AppState, userId: string): number {
-  return state.notifications.filter((n) => n.recipientId === userId && !n.readAt).length;
+  return state.notifications.filter((n) => n.recipientId === userId && !n.isRead).length;
 }
 export function selectNotifications(state: AppState, userId: string) {
   return state.notifications
@@ -598,7 +601,7 @@ export function threadMessages(state: AppState, conversationId: string): Message
 const EMPTY_STATE: AppState = {
   session: null, profiles: [], posts: [], comments: [], likes: [],
   follows: [], reposts: [], saves: [], blocks: [], stories: [],
-  notifications: [], reports: [], conversations: [], messages: [],
+  notifications: [], reports: [], conversations: [], messages: [], mutedNotifications: [],
 };
 
 const CANNED_COMMENTS = [
@@ -936,7 +939,7 @@ export class DemoProvider implements DataProvider {
     let notifications = this.state.notifications;
     if (!liked && post.authorId !== me) {
       notifications = [
-        { id: uid(), recipientId: post.authorId, actorId: me, type: 'like' as const, postId, readAt: null, createdAt: now() },
+        { id: uid(), recipientId: post.authorId, actorId: me, type: 'like' as const, entityType: 'post', entityId: postId, data: { post_id: postId }, isRead: false, createdAt: now() },
         ...notifications,
       ];
     }
@@ -963,7 +966,7 @@ export class DemoProvider implements DataProvider {
       post.authorId === me
         ? this.state.notifications
         : [
-            { id: uid(), recipientId: post.authorId, actorId: me, type: 'comment' as const, postId, readAt: null, createdAt: now() },
+            { id: uid(), recipientId: post.authorId, actorId: me, type: 'comment' as const, entityType: 'post', entityId: postId, data: { post_id: postId }, isRead: false, createdAt: now() },
             ...this.state.notifications,
           ];
     this.commit({
@@ -1016,7 +1019,7 @@ export class DemoProvider implements DataProvider {
       post.authorId === me
         ? this.state.notifications
         : [
-            { id: uid(), recipientId: post.authorId, actorId: me, type: 'repost' as const, postId, readAt: null, createdAt: now() },
+            { id: uid(), recipientId: post.authorId, actorId: me, type: 'repost' as const, entityType: 'post', entityId: postId, data: { post_id: postId }, isRead: false, createdAt: now() },
             ...this.state.notifications,
           ];
     this.commit({
@@ -1061,7 +1064,7 @@ export class DemoProvider implements DataProvider {
     }
     const follow: Follow = { followerId: me, followingId: userId, createdAt: now() };
     const notifications = [
-      { id: uid(), recipientId: userId, actorId: me, type: 'follow' as const, postId: null, readAt: null, createdAt: now() },
+      { id: uid(), recipientId: userId, actorId: me, type: 'follow' as const, entityType: 'user', entityId: me, data: {}, isRead: false, createdAt: now() },
       ...this.state.notifications,
     ];
     this.commit({ follows: [follow, ...this.state.follows], notifications });
@@ -1231,8 +1234,15 @@ export class DemoProvider implements DataProvider {
     if (!guard.ok) return guard;
     const me = this.state.session!.id;
     this.commit({
-      notifications: this.state.notifications.map((n) => (n.recipientId === me && !n.readAt ? { ...n, readAt: now() } : n)),
+      notifications: this.state.notifications.map((n) => (n.recipientId === me && !n.isRead ? { ...n, isRead: true } : n)),
     });
+    return { ok: true };
+  }
+
+  setNotificationMutes(types: string[]): Result {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    this.commit({ mutedNotifications: [...types] });
     return { ok: true };
   }
 
@@ -1275,7 +1285,7 @@ export class DemoProvider implements DataProvider {
           likes: [{ userId: actor.id, postId: post.id, createdAt: now() }, ...this.state.likes],
           posts: this.state.posts.map((p) => (p.id === post.id ? { ...p, likeCount: p.likeCount + 1 } : p)),
           notifications: [
-            { id: uid(), recipientId: me, actorId: actor.id, type: 'like', postId: post.id, readAt: null, createdAt: now() },
+            { id: uid(), recipientId: me, actorId: actor.id, type: 'like', entityType: 'post', entityId: post.id, data: { post_id: post.id }, isRead: false, createdAt: now() },
             ...this.state.notifications,
           ],
         });
@@ -1288,7 +1298,7 @@ export class DemoProvider implements DataProvider {
           comments: [{ id: uid(), postId: post.id, authorId: actor.id, body, imageUrls: [], createdAt: now() }, ...this.state.comments],
           posts: this.state.posts.map((p) => (p.id === post.id ? { ...p, commentCount: p.commentCount + 1 } : p)),
           notifications: [
-            { id: uid(), recipientId: me, actorId: actor.id, type: 'comment', postId: post.id, readAt: null, createdAt: now() },
+            { id: uid(), recipientId: me, actorId: actor.id, type: 'comment', entityType: 'post', entityId: post.id, data: { post_id: post.id }, isRead: false, createdAt: now() },
             ...this.state.notifications,
           ],
         });
@@ -1299,7 +1309,7 @@ export class DemoProvider implements DataProvider {
         reposts: [{ userId: actor.id, postId: post.id, createdAt: now() }, ...this.state.reposts],
         posts: this.state.posts.map((p) => (p.id === post.id ? { ...p, repostCount: p.repostCount + 1 } : p)),
         notifications: [
-          { id: uid(), recipientId: me, actorId: actor.id, type: 'repost', postId: post.id, readAt: null, createdAt: now() },
+          { id: uid(), recipientId: me, actorId: actor.id, type: 'repost', entityType: 'post', entityId: post.id, data: { post_id: post.id }, isRead: false, createdAt: now() },
           ...this.state.notifications,
         ],
       });
@@ -1310,7 +1320,7 @@ export class DemoProvider implements DataProvider {
     this.commit({
       follows: [{ followerId: actor.id, followingId: me, createdAt: now() }, ...this.state.follows],
       notifications: [
-        { id: uid(), recipientId: me, actorId: actor.id, type: 'follow', postId: null, readAt: null, createdAt: now() },
+        { id: uid(), recipientId: me, actorId: actor.id, type: 'follow', entityType: 'user', entityId: actor.id, data: {}, isRead: false, createdAt: now() },
         ...this.state.notifications,
       ],
     });
@@ -1383,11 +1393,13 @@ const mapStory = (r: Row): Story => ({
 });
 const mapNotif = (r: Row): AppNotification => ({
   id: rs(r.id),
-  recipientId: rs(r.recipient_id),
+  recipientId: rs(r.user_id),
   actorId: rs(r.actor_id),
   type: rs(r.type) as AppNotification['type'],
-  postId: rOrNull(r.post_id),
-  readAt: rOrNull(r.read_at),
+  entityType: rs(r.entity_type),
+  entityId: rOrNull(r.entity_id),
+  data: (r.data ?? {}) as Record<string, string>,
+  isRead: !!r.is_read,
   createdAt: rAt(r.created_at),
 });
 const mapReport = (r: Row): Report => ({
@@ -1476,7 +1488,7 @@ class SupabaseProvider implements DataProvider {
       return (data as Row[]) ?? [];
     };
     try {
-      const [profiles, posts, comments, follows, likes, saves, reposts, blocks, stories, notifications, reports, conversations] =
+      const [profiles, posts, comments, follows, likes, saves, reposts, blocks, stories, notifications, reports, conversations, prefs] =
         await Promise.all([
           rows(sb.from('profiles').select('*').limit(5000)),
           rows(sb.from('posts').select('*').order('created_at', { ascending: false }).limit(1000)),
@@ -1490,6 +1502,7 @@ class SupabaseProvider implements DataProvider {
           rows(sb.from('notifications').select('*').order('created_at', { ascending: false }).limit(300)),
           rows(sb.from('reports').select('*').order('created_at', { ascending: false }).limit(500)),
           rows(sb.from('conversations').select('*').order('created_at', { ascending: false }).limit(500)),
+          rows(sb.from('notification_prefs').select('*').eq('user_id', uid).limit(1)),
         ]);
       const convIds = conversations.map((c) => rs(c.id));
       const [memberRows, messageRows]: [Row[], Row[]] = convIds.length
@@ -1517,6 +1530,7 @@ class SupabaseProvider implements DataProvider {
         blocks: blocks.map(mapBlock),
         stories: stories.map(mapStory),
         notifications: notifications.map(mapNotif),
+        mutedNotifications: (prefs[0]?.muted_types as string[] | undefined) ?? [],
         reports: reports.map(mapReport),
         conversations: conversations.map((c) => ({
           id: rs(c.id),
@@ -1539,10 +1553,18 @@ class SupabaseProvider implements DataProvider {
   /** Realtime events → debounced full refresh (simple, always consistent). */
   private attachRealtime(): void {
     if (this.channel) return;
-    const ch = this.sb.channel(`rt:${this.uid}`);
-    for (const table of ['notifications', 'messages', 'likes', 'follows', 'reposts', 'posts', 'comments', 'stories', 'profiles'] as const) {
+    const uid = this.uid;
+    if (!uid) return;
+    const ch = this.sb.channel(`rt:${uid}`);
+    for (const table of ['messages', 'likes', 'follows', 'reposts', 'posts', 'comments', 'stories', 'profiles'] as const) {
       ch.on('postgres_changes', { event: '*', schema: 'public', table }, () => this.scheduleRefresh());
     }
+    // NOT-05: notifications arrive filtered to this user's rows only.
+    ch.on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${uid}` },
+      () => this.scheduleRefresh(),
+    );
     ch.subscribe();
     this.channel = ch;
   }
@@ -1726,7 +1748,7 @@ class SupabaseProvider implements DataProvider {
       await run(this.sb.from('reposts').delete().eq('user_id', meId));
       await run(this.sb.from('follows').delete().or(`${or('follower_id')},${or('following_id')}`));
       await run(this.sb.from('blocks').delete().or(`${or('blocker_id')},${or('blocked_id')}`));
-      await run(this.sb.from('notifications').delete().or(`${or('recipient_id')},${or('actor_id')}`));
+      await run(this.sb.from('notifications').delete().or(`${or('user_id')},${or('actor_id')}`));
       await run(this.sb.from('reports').delete().eq('reporter_id', meId));
       // Keep the auth user, blank the public profile — signing up again restarts onboarding.
       await run(
@@ -2274,10 +2296,29 @@ class SupabaseProvider implements DataProvider {
     const meId = this.state.session!.id;
     const before = this.state;
     this.commit({
-      notifications: this.state.notifications.map((n) => (n.recipientId === meId && !n.readAt ? { ...n, readAt: now() } : n)),
+      notifications: this.state.notifications.map((n) => (n.recipientId === meId && !n.isRead ? { ...n, isRead: true } : n)),
     });
     try {
-      const { error } = await this.sb.from('notifications').update({ read_at: now() }).eq('recipient_id', meId).is('read_at', null);
+      const { error } = await this.sb.from('notifications').update({ is_read: true }).eq('user_id', meId).eq('is_read', false);
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async setNotificationMutes(types: string[]): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    const before = this.state;
+    this.commit({ mutedNotifications: [...types] });
+    try {
+      const { error } = await this.sb
+        .from('notification_prefs')
+        .upsert({ user_id: meId, muted_types: types, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
       if (error) throw error;
       return { ok: true };
     } catch (e) {
