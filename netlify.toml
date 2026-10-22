@@ -1,0 +1,13 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# SPA fallback — React Router serves every route client-side,
+# so deep links like /home or /u/maya must load index.html.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
