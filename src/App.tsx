@@ -12,6 +12,7 @@ const Explore = lazy(() => import('./pages/Explore'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 const Profile = lazy(() => import('./pages/Profile'));
 const Settings = lazy(() => import('./pages/Settings'));
+const PrivacySettings = lazy(() => import('./pages/PrivacySettings'));
 const AdminReports = lazy(() => import('./pages/AdminReports'));
 const Messages = lazy(() => import('./pages/Messages'));
 const MessageThread = lazy(() => import('./pages/MessageThread'));
@@ -47,6 +48,7 @@ export default function App() {
         <Route path="/hashtag/:tag" element={<Suspense fallback={<RouteFallback />}><Hashtag /></Suspense>} />
         <Route path="/saved" element={<Suspense fallback={<RouteFallback />}><Saved /></Suspense>} />
         <Route path="/settings" element={<Suspense fallback={<RouteFallback />}><Settings /></Suspense>} />
+        <Route path="/settings/privacy" element={<Suspense fallback={<RouteFallback />}><PrivacySettings /></Suspense>} />
         <Route
           path="/admin/reports"
           element={<AdminRoute><Suspense fallback={<RouteFallback />}><AdminReports /></Suspense></AdminRoute>}

@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { Hash, TrendingUp, Users } from 'lucide-react';
 import Avatar from './Avatar';
 import FollowButton from './FollowButton';
-import { currentUserProfile, followerCount, trendingHashtags, useAppState } from '../lib/store';
+import { currentUserProfile, followerCount, mutedIdsFor, trendingHashtags, useAppState } from '../lib/store';
 
 /**
  * Desktop right rail (BLK-05): secondary content that would otherwise be
@@ -13,10 +13,13 @@ export default function SidePanel() {
   const state = useAppState();
   const me = currentUserProfile(state);
   const tags = trendingHashtags(state, me?.id ?? null, 5);
-  const following = new Set(state.follows.filter((f) => f.followerId === me?.id).map((f) => f.followingId));
+  // Only accepted follows count (PRV-03); pending requests keep them out of suggestions too.
+  const following = new Set(state.follows.filter((f) => f.followerId === me?.id && f.status !== 'pending').map((f) => f.followingId));
   const blocked = new Set(state.blocks.filter((b) => b.blockerId === me?.id).map((b) => b.blockedId));
+  const muted = me ? mutedIdsFor(state, me.id) : new Set<string>();
   const suggested = state.profiles
-    .filter((p) => p.id !== me?.id && !following.has(p.id) && !blocked.has(p.id) && !p.isSuspended)
+    .filter((p) => p.id !== me?.id && !following.has(p.id) && !blocked.has(p.id) && !muted.has(p.id) && !p.isSuspended)
+    .filter((p) => p.discoverable !== false) // PRV-09: non-discoverable excluded from suggestions
     .sort((a, b) => followerCount(state, b.id) - followerCount(state, a.id))
     .slice(0, 3);
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Ban, CalendarDays, Flag, MessageCircle, Settings } from 'lucide-react';
+import { Ban, Bell, BellOff, CalendarDays, Check, Flag, Lock, MessageCircle, Settings, X } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import Avatar from '../components/Avatar';
 import FollowButton from '../components/FollowButton';
@@ -9,10 +9,14 @@ import { confirmAction } from '../components/ConfirmDialog';
 import { ProfileSkeleton } from '../components/Skeleton';
 import { toast } from '../components/Toast';
 import {
+  canViewPostsOf,
   currentUserProfile,
+  dmAllows,
   followerCount,
   followingCount,
   isFollowing,
+  mutedIdsFor,
+  pendingRequest,
   profileByUsername,
   selectAuthorFeed,
   useActions,
@@ -58,10 +62,26 @@ export default function Profile() {
 
   const isMe = me?.id === profile.id;
   const following = me ? isFollowing(state, me.id, profile.id) : false;
+  const requested = me && !isMe ? pendingRequest(state, me.id, profile.id) !== null : false;
+  // PRV-02: non-followers of followers-only/private accounts see a lock notice.
+  const canSeePosts = me ? canViewPostsOf(state, me.id, profile.id) : false;
+  const isMuted = me ? mutedIdsFor(state, me.id).has(profile.id) : false;
+  const canMessageMe = me ? dmAllows(state, me.id, profile.id) : false;
+  // PRV-04: follow lists / join date honour the owner's toggles (owner + admin always see their own).
+  const showLists = isMe || me?.role === 'admin' || profile.showFollowLists !== false;
+  const showJoin = isMe || me?.role === 'admin' || profile.showJoinDate !== false;
   const myPosts = visiblePosts(state, me?.id ?? null).filter((p) => p.authorId === profile.id);
 
-  const followerRows = state.follows.filter((f) => f.followingId === profile.id);
-  const followingRows = state.follows.filter((f) => f.followerId === profile.id);
+  // PRV-03: pending requests to me, shown on my own profile for approval.
+  const requestRows = isMe
+    ? state.follows.filter((f) => f.followingId === profile.id && f.status === 'pending')
+    : [];
+  const requestProfiles = requestRows
+    .map((f) => state.profiles.find((p) => p.id === f.followerId))
+    .filter((p): p is NonNullable<typeof p> => !!p && !!p.username);
+
+  const followerRows = state.follows.filter((f) => f.followingId === profile.id && f.status !== 'pending');
+  const followingRows = state.follows.filter((f) => f.followerId === profile.id && f.status !== 'pending');
   const listRows = tab === 'followers' ? followerRows : followingRows;
   const listProfiles = listRows
     .map((f) => state.profiles.find((p) => p.id === (tab === 'followers' ? f.followerId : f.followingId)))
@@ -85,6 +105,20 @@ export default function Profile() {
     navigate(`/messages/${r.conversationId}`);
   }
 
+  // PRV-08: mute hides their content from my feeds without blocking.
+  async function toggleMute() {
+    const r = isMuted ? await actions.unmuteUser(profile!.id) : await actions.muteUser(profile!.id);
+    if (!r.ok) return toast(r.error ?? 'Could not update mute.', 'error');
+    toast(isMuted ? `Unmuted @${profile!.username}.` : `Muted @${profile!.username}. Their posts are hidden from your feeds.`, 'success');
+  }
+
+  // PRV-03: approve/decline follow requests (own profile).
+  async function decideRequest(followerId: string, accept: boolean) {
+    const r = accept ? await actions.approveFollow(followerId) : await actions.declineFollow(followerId);
+    if (!r.ok) return toast(r.error ?? 'Could not update request.', 'error');
+    toast(accept ? 'Follow request approved.' : 'Follow request declined.', 'success');
+  }
+
   return (
     <div className="space-y-4">
       <header className="card p-5">
@@ -102,9 +136,11 @@ export default function Profile() {
             </div>
             <p className="text-sm text-slate-500">@{profile.username}</p>
             {profile.bio && <p className="mt-2 text-[15px] leading-relaxed">{profile.bio}</p>}
-            <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
-              <CalendarDays size={13} /> Joined {new Date(profile.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-            </p>
+            {showJoin && (
+              <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
+                <CalendarDays size={13} /> Joined {new Date(profile.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+              </p>
+            )}
           </div>
           <div className="flex shrink-0 flex-col gap-2">
             {isMe ? (
@@ -114,9 +150,11 @@ export default function Profile() {
             ) : (
               me && (
                 <>
-                  <button onClick={messageUser} className="btn-ghost border border-white/15 bg-white/[0.05]">
-                    <MessageCircle size={15} /> Message
-                  </button>
+                  {canMessageMe && (
+                    <button onClick={messageUser} className="btn-ghost border border-white/15 bg-white/[0.05]">
+                      <MessageCircle size={15} /> Message
+                    </button>
+                  )}
                   <FollowButton userId={profile.id} />
                 </>
               )
@@ -125,6 +163,9 @@ export default function Profile() {
               <div className="flex justify-center gap-1">
                 <button onClick={() => setReporting(true)} aria-label="Report this user" className="tap44 rounded-full p-2 text-slate-400 hover:bg-white/[0.06]">
                   <Flag size={15} />
+                </button>
+                <button onClick={() => void toggleMute()} aria-label={isMuted ? 'Unmute this user' : 'Mute this user'} className="tap44 rounded-full p-2 text-slate-400 hover:bg-white/[0.06]">
+                  {isMuted ? <BellOff size={15} /> : <Bell size={15} />}
                 </button>
                 <button onClick={blockUser} aria-label="Block this user" className="tap44 rounded-full p-2 text-slate-400 hover:bg-red-50 hover:text-red-600">
                   <Ban size={15} />
@@ -140,16 +181,77 @@ export default function Profile() {
           <Stat label="Following" value={followingCount(state, profile.id)} active={tab === 'following'} onClick={() => { setTab('following'); setLimit(PAGE); }} />
         </div>
         {me && following && !isMe && <p className="mt-2 text-xs text-slate-400">You follow @{profile.username}</p>}
+        {me && requested && !isMe && (
+          <p className="mt-2 text-xs text-slate-400">Request sent — @{profile.username} hasn’t approved it yet.</p>
+        )}
       </header>
 
+      {/* PRV-03: my pending follow requests, with approve/decline. */}
+      {isMe && requestProfiles.length > 0 && (
+        <section aria-label="Follow requests" className="card p-5">
+          <h2 className="font-semibold">Follow requests</h2>
+          <p className="mt-1 text-sm text-slate-500">People asking to follow you. Approving lets them see your posts.</p>
+          <ul className="mt-3 space-y-2">
+            {requestProfiles.map((p) => (
+              <li key={p.id} className="flex items-center gap-3 rounded-xl border border-slate-100 p-3">
+                <Link to={`/u/${p.username}`}>
+                  <Avatar src={p.avatarUrl} name={p.displayName} size={40} />
+                </Link>
+                <div className="min-w-0 flex-1">
+                  <Link to={`/u/${p.username}`} className="block truncate text-sm font-semibold hover:underline">{p.displayName}</Link>
+                  <p className="truncate text-xs text-slate-500">@{p.username}</p>
+                </div>
+                <div className="flex shrink-0 gap-1">
+                  <button
+                    onClick={() => void decideRequest(p.id, true)}
+                    aria-label={`Approve follow request from @${p.username}`}
+                    className="tap44 rounded-full bg-brand-600 p-2 text-white hover:bg-brand-700"
+                  >
+                    <Check size={15} />
+                  </button>
+                  <button
+                    onClick={() => void decideRequest(p.id, false)}
+                    aria-label={`Decline follow request from @${p.username}`}
+                    className="tap44 rounded-full border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {tab === 'posts' ? (
-        <InfiniteFeed items={feed.items} hasMore={feed.hasMore} onLoadMore={feed.loadMore}
-          empty={<p className="card p-6 text-center text-sm text-slate-500">
-            {isMe ? 'You haven’t posted yet — share your first post from Home.' : `@${profile.username} hasn’t posted anything visible yet.`}
-          </p>} />
+        canSeePosts ? (
+          <InfiniteFeed items={feed.items} hasMore={feed.hasMore} onLoadMore={feed.loadMore}
+            empty={<p className="card p-6 text-center text-sm text-slate-500">
+              {isMe ? 'You haven’t posted yet — share your first post from Home.' : `@${profile.username} hasn’t posted anything visible yet.`}
+            </p>} />
+        ) : (
+          /* PRV-02: non-followers of a restricted account get a lock notice. */
+          <div className="card p-8 text-center">
+            <Lock size={22} className="mx-auto text-slate-400" aria-hidden />
+            <h2 className="mt-2 font-semibold">
+              {profile.visibility === 'private' ? 'This account is private' : 'Posts are for followers only'}
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Follow @{profile.username} {profile.visibility === 'private' ? 'and wait for approval' : ''} to see their posts.
+            </p>
+            <div className="mt-4 flex justify-center">
+              <FollowButton userId={profile.id} />
+            </div>
+          </div>
+        )
       ) : (
         <section aria-label={`${tab} list`}>
-          {listProfiles.length === 0 ? (
+          {!showLists ? (
+            /* PRV-04: owner hid their follow lists — counts stay, contents don't. */
+            <p className="card p-6 text-center text-sm text-slate-500">
+              @{profile.username} keeps their {tab === 'followers' ? 'follower' : 'following'} list private.
+            </p>
+          ) : listProfiles.length === 0 ? (
             <p className="card p-6 text-center text-sm text-slate-500">
               {tab === 'followers' ? 'No followers yet.' : 'Not following anyone yet.'}
             </p>
@@ -169,7 +271,7 @@ export default function Profile() {
               ))}
             </ul>
           )}
-          {listProfiles.length > limit && (
+          {showLists && listProfiles.length > limit && (
             <button onClick={() => setLimit((l) => l + PAGE)} className="btn-ghost mx-auto mt-3 flex">
               Show more ({listProfiles.length - limit} remaining)
             </button>

@@ -19,6 +19,9 @@ export type ReportStatus = 'open' | 'dismissed' | 'actioned';
 export type MediaKind = 'image' | 'video';
 
 /** 1:1 with auth.users (Google OAuth subject = id) */
+export type Visibility = 'public' | 'followers' | 'private';
+export type WhoCan = 'everyone' | 'followers' | 'nobody';
+
 export interface Profile {
   id: string;
   username: string | null; // null until onboarding completes (PROF-1)
@@ -28,6 +31,30 @@ export interface Profile {
   role: Role;
   isSuspended: boolean;
   createdAt: string;
+  /* Workstream E (PRV-01/04/05/06/09) — optional in state, always present from DB rows */
+  visibility?: Visibility;
+  showJoinDate?: boolean;
+  showFollowLists?: boolean;
+  dmPermission?: WhoCan;
+  cabinInvitePermission?: WhoCan;
+  discoverable?: boolean;
+}
+
+/** Row of the N—N `mutes` table (PRV-08): muter hides muted's content. */
+export interface Mute {
+  muterId: string;
+  mutedId: string;
+  createdAt: string;
+}
+
+/** Privacy settings patch (PRV-01/04/05/06/09) — instant-save page. */
+export interface PrivacyInput {
+  visibility?: Visibility;
+  showJoinDate?: boolean;
+  showFollowLists?: boolean;
+  dmPermission?: WhoCan;
+  cabinInvitePermission?: WhoCan;
+  discoverable?: boolean;
 }
 
 /** The signed-in session (only Google scopes: openid, email, profile — AUTH-4) */
@@ -72,6 +99,8 @@ export interface LikeRow {
 export interface Follow {
   followerId: string;
   followingId: string;
+  /** PRV-03: 'pending' rows are follow requests; legacy rows are 'accepted'. */
+  status?: 'pending' | 'accepted';
   createdAt: string;
 }
 
@@ -168,6 +197,8 @@ export interface AppState {
   reposts: Repost[];
   saves: Save[];
   blocks: Block[];
+  /** PRV-08: users I muted (their content is hidden from my feeds). */
+  mutes?: Mute[];
   stories: Story[];
   notifications: AppNotification[];
   /** Muted notification types for the signed-in user (NOT-09). */

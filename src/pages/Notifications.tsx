@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AtSign, Bell, HandHeart, Heart, MessageCircle, Repeat2, UserPlus, UserCheck } from 'lucide-react';
+import { AtSign, Bell, Check, HandHeart, Heart, MessageCircle, Repeat2, UserPlus, UserCheck, X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AnimatedList } from '../components/AnimatedList';
 import Avatar from '../components/Avatar';
 import { ListSkeleton } from '../components/Skeleton';
+import { toast } from '../components/Toast';
 import { timeAgo } from '../lib/format';
 import { profileById, selectNotifications, useActions, useAppState, useDataReady } from '../lib/store';
 import type { AppNotification } from '../types';
@@ -95,10 +96,59 @@ export default function Notifications() {
   const visible = items.slice(0, limit);
   const hasMore = items.length > limit;
 
+  // PRV-03: approve/decline a follow request straight from the notification.
+  async function decide(followerId: string, accept: boolean) {
+    const r = accept ? await actions.approveFollow(followerId) : await actions.declineFollow(followerId);
+    if (!r.ok) return toast(r.error ?? 'Could not update request.', 'error');
+    toast(accept ? 'Follow request approved.' : 'Follow request declined.', 'success');
+  }
+
   function renderRow(n: AppNotification) {
     const actor = profileById(state, n.actorId);
     const { Icon, cls } = ICONS[n.type] ?? ICONS.follow!;
     if (!actor) return null;
+
+    // PRV-03: follow requests are actionable inline — approve or decline
+    // without leaving the page (the profile page has the same controls).
+    if (n.type === 'follow_request') {
+      return (
+        <div
+          key={n.id}
+          role="listitem"
+          className={`card flex w-full items-center gap-3 p-4 ${n.isRead ? '' : 'border-brand-100 bg-brand-50/40'}`}
+        >
+          <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${cls}`}>
+            <Icon size={16} aria-hidden />
+          </span>
+          <Avatar src={actor.avatarUrl} name={actor.displayName} size={32} />
+          <button
+            onClick={() => navigate(targetFor(n, actor.username ?? ''))}
+            className="min-w-0 flex-1 text-left text-sm hover:opacity-80"
+          >
+            <b className="font-semibold">{actor.displayName}</b>{' '}
+            <span className="text-slate-600">{describe(n.type)}</span>
+            <span className="ml-1.5 text-xs text-slate-400">{timeAgo(n.createdAt)} ago</span>
+          </button>
+          <span className="flex shrink-0 gap-1">
+            <button
+              onClick={() => void decide(n.actorId, true)}
+              aria-label={`Approve follow request from @${actor.username}`}
+              className="tap44 rounded-full bg-brand-600 p-2 text-white hover:bg-brand-700"
+            >
+              <Check size={15} aria-hidden />
+            </button>
+            <button
+              onClick={() => void decide(n.actorId, false)}
+              aria-label={`Decline follow request from @${actor.username}`}
+              className="tap44 rounded-full border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"
+            >
+              <X size={15} aria-hidden />
+            </button>
+          </span>
+        </div>
+      );
+    }
+
     return (
       <div key={n.id} role="listitem" className="w-full">
         <button

@@ -22,7 +22,9 @@ import type {
   LikeRow,
   MediaKind,
   Message,
+  Mute,
   Post,
+  PrivacyInput,
   Profile,
   Report,
   ReportReason,
@@ -82,8 +84,16 @@ export interface DataProvider {
   addComment(postId: string, body: string, imageUrls?: string[]): MaybePromise<Result>;
   deleteComment(commentId: string): MaybePromise<Result>;
   toggleFollow(userId: string): MaybePromise<Result>;
+  /** PRV-03: approve/decline a pending follow request (target only). */
+  approveFollow(followerId: string): MaybePromise<Result>;
+  declineFollow(followerId: string): MaybePromise<Result>;
   blockUser(userId: string): MaybePromise<Result>;
   unblockUser(userId: string): MaybePromise<Result>;
+  /** PRV-08: mute/unmute a user's content in my feeds. */
+  muteUser(userId: string): MaybePromise<Result>;
+  unmuteUser(userId: string): MaybePromise<Result>;
+  /** PRV-01/04/05/06/09: instant-save privacy settings. */
+  updatePrivacy(input: PrivacyInput): MaybePromise<Result>;
   submitReport(targetType: ReportTarget, targetId: string, reason: ReportReason, details: string | null): MaybePromise<Result>;
   resolveReport(reportId: string, status: 'dismissed' | 'actioned'): MaybePromise<Result>;
   markNotificationsRead(): MaybePromise<Result>;
@@ -352,6 +362,37 @@ export function blockedIdsFor(state: AppState, userId: string): Set<string> {
   return set;
 }
 
+/** PRV-08: users this person muted (their content is hidden from their feeds). */
+export function mutedIdsFor(state: AppState, userId: string): Set<string> {
+  return new Set((state.mutes ?? []).filter((m) => m.muterId === userId).map((m) => m.mutedId));
+}
+
+/** PRV-03: a pending follow request from `me` to `them`, if any. */
+export function pendingRequest(state: AppState, me: string, them: string): Follow | null {
+  return state.follows.find((f) => f.followerId === me && f.followingId === them && f.status === 'pending') ?? null;
+}
+
+/** PRV-03/PRV-11: can `viewerId` see `authorId`'s posts? Accepted follows only. */
+export function canViewPostsOf(state: AppState, viewerId: string | null, authorId: string): boolean {
+  if (!viewerId) return false;
+  if (viewerId === authorId) return true;
+  const author = profileById(state, authorId);
+  const viewer = profileById(state, viewerId);
+  if (!author) return false;
+  if (viewer?.role === 'admin') return true; // moderation stays complete
+  if (author.visibility === 'public' || !author.visibility) return true;
+  return isFollowing(state, viewerId, authorId);
+}
+
+/** PRV-05: does `otherId`'s DM setting allow `viewerId` to message them? */
+export function dmAllows(state: AppState, viewerId: string, otherId: string): boolean {
+  const other = profileById(state, otherId);
+  const perm = other?.dmPermission ?? 'everyone';
+  if (perm === 'everyone') return true;
+  if (perm === 'nobody') return false;
+  return isFollowing(state, viewerId, otherId);
+}
+
 export function currentUserProfile(state: AppState): Profile | null {
   if (!state.session) return null;
   return state.profiles.find((p) => p.id === state.session!.id) ?? null;
@@ -369,11 +410,16 @@ export function profileByUsername(state: AppState, username: string): Profile | 
 /** Live posts visible to `viewer`: not deleted, author active, blocks enforced (FEED-4). */
 export function visiblePosts(state: AppState, viewerId: string | null): Post[] {
   const blocked = viewerId ? blockedIdsFor(state, viewerId) : new Set<string>();
+  const muted = viewerId ? mutedIdsFor(state, viewerId) : new Set<string>();
   return state.posts
     .filter((p) => !p.deletedAt)
     .filter((p) => {
       const author = profileById(state, p.authorId);
-      return author && !author.isSuspended && !blocked.has(p.authorId);
+      if (!author || author.isSuspended || blocked.has(p.authorId)) return false;
+      if (muted.has(p.authorId)) return false; // PRV-08
+      // PRV-02/PRV-11: mirrors posts_select_visible — followers-only/private
+      // authors' posts are hidden from non-followers.
+      return canViewPostsOf(state, viewerId, p.authorId);
     })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
@@ -402,7 +448,8 @@ function pageOf(entries: TimedItem[], cursor: string | null, limit: number): Fee
  * wins so nothing renders twice. Reverse-chronological, 20 per page.
  */
 export function selectFollowingFeed(state: AppState, viewerId: string, cursor: string | null, limit = LIMITS.feedPageSize): FeedPage {
-  const following = new Set(state.follows.filter((f) => f.followerId === viewerId).map((f) => f.followingId));
+  // PRV-03: pending requests grant no feed access — accepted follows only.
+  const following = new Set(state.follows.filter((f) => f.followerId === viewerId && f.status !== 'pending').map((f) => f.followingId));
   following.add(viewerId);
   const posts = visiblePosts(state, viewerId);
 
@@ -493,8 +540,10 @@ export function selectSearchUsers(state: AppState, viewerId: string | null, q: s
   const query = q.trim().toLowerCase();
   if (!query) return [];
   const blocked = viewerId ? blockedIdsFor(state, viewerId) : new Set<string>();
+  const muted = viewerId ? mutedIdsFor(state, viewerId) : new Set<string>();
   return state.profiles
-    .filter((p) => p.username && !p.isSuspended && !blocked.has(p.id))
+    .filter((p) => p.username && !p.isSuspended && !blocked.has(p.id) && !muted.has(p.id))
+    .filter((p) => p.discoverable !== false) // PRV-09: non-discoverable excluded from search
     .filter((p) => p.username!.toLowerCase().startsWith(query) || p.displayName.toLowerCase().startsWith(query))
     .sort((a, b) => a.username!.length - b.username!.length)
     .slice(0, limit);
@@ -503,8 +552,9 @@ export function selectSearchUsers(state: AppState, viewerId: string | null, q: s
 /** Active (non-expired) stories grouped by author, newest authors first (F-STO). */
 export function activeStories(state: AppState, viewerId: string | null): Array<{ profile: Profile; stories: Story[] }> {
   const blocked = viewerId ? blockedIdsFor(state, viewerId) : new Set<string>();
+  const muted = viewerId ? mutedIdsFor(state, viewerId) : new Set<string>();
   const live = state.stories.filter(
-    (s) => new Date(s.expiresAt).getTime() > Date.now() && !blocked.has(s.userId),
+    (s) => new Date(s.expiresAt).getTime() > Date.now() && !blocked.has(s.userId) && !muted.has(s.userId),
   );
   const groups = new Map<string, Story[]>();
   for (const s of live) {
@@ -528,13 +578,14 @@ export function activeStories(state: AppState, viewerId: string | null): Array<{
 
 /* --- social graph / engagement counts --- */
 export function followerCount(state: AppState, userId: string): number {
-  return state.follows.filter((f) => f.followingId === userId).length;
+  return state.follows.filter((f) => f.followingId === userId && f.status !== 'pending').length;
 }
 export function followingCount(state: AppState, userId: string): number {
-  return state.follows.filter((f) => f.followerId === userId).length;
+  return state.follows.filter((f) => f.followerId === userId && f.status !== 'pending').length;
 }
 export function isFollowing(state: AppState, me: string, them: string): boolean {
-  return state.follows.some((f) => f.followerId === me && f.followingId === them);
+  // PRV-03: only accepted follows count; pending requests grant nothing.
+  return state.follows.some((f) => f.followerId === me && f.followingId === them && f.status !== 'pending');
 }
 export function hasLiked(state: AppState, me: string | null, postId: string): boolean {
   if (!me) return false;
@@ -1046,7 +1097,7 @@ export class DemoProvider implements DataProvider {
     return { ok: true };
   }
 
-  /* --- social graph (FOL-1..3, MOD-3) --- */
+  /* --- social graph (FOL-1..3, MOD-3, PRV-03) --- */
   toggleFollow(userId: string): Result {
     const guard = this.requireActive();
     if (!guard.ok) return guard;
@@ -1059,15 +1110,102 @@ export class DemoProvider implements DataProvider {
 
     const existing = this.state.follows.find((f) => f.followerId === me && f.followingId === userId);
     if (existing) {
+      // Unfollow, or cancel a pending request (same row, same button).
       this.commit({ follows: this.state.follows.filter((f) => !(f.followerId === me && f.followingId === userId)) });
       return { ok: true };
     }
-    const follow: Follow = { followerId: me, followingId: userId, createdAt: now() };
+    // PRV-03: private accounts require approval — the row lands as 'pending'
+    // and the target gets a follow_request, not a follow.
+    const isPrivate = target.visibility === 'private';
+    const follow: Follow = { followerId: me, followingId: userId, status: isPrivate ? 'pending' : 'accepted', createdAt: now() };
     const notifications = [
-      { id: uid(), recipientId: userId, actorId: me, type: 'follow' as const, entityType: 'user', entityId: me, data: {}, isRead: false, createdAt: now() },
+      {
+        id: uid(),
+        recipientId: userId,
+        actorId: me,
+        type: (isPrivate ? 'follow_request' : 'follow') as AppNotification['type'],
+        entityType: 'user',
+        entityId: me,
+        data: {},
+        isRead: false,
+        createdAt: now(),
+      },
       ...this.state.notifications,
     ];
     this.commit({ follows: [follow, ...this.state.follows], notifications });
+    return { ok: true };
+  }
+
+  approveFollow(followerId: string): Result {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const me = this.state.session!.id;
+    const row = this.state.follows.find((f) => f.followerId === followerId && f.followingId === me && f.status === 'pending');
+    if (!row) return { ok: false, error: 'No pending request from this user.' };
+    this.commit({
+      follows: this.state.follows.map((f) =>
+        f.followerId === followerId && f.followingId === me ? { ...f, status: 'accepted' as const } : f,
+      ),
+      // PRV-03: requester is notified of the approval.
+      notifications: [
+        {
+          id: uid(),
+          recipientId: followerId,
+          actorId: me,
+          type: 'follow_request_approved' as const,
+          entityType: 'user',
+          entityId: me,
+          data: {},
+          isRead: false,
+          createdAt: now(),
+        },
+        ...this.state.notifications,
+      ],
+    });
+    return { ok: true };
+  }
+
+  declineFollow(followerId: string): Result {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const me = this.state.session!.id;
+    const row = this.state.follows.find((f) => f.followerId === followerId && f.followingId === me && f.status === 'pending');
+    if (!row) return { ok: false, error: 'No pending request from this user.' };
+    this.commit({ follows: this.state.follows.filter((f) => !(f.followerId === followerId && f.followingId === me)) });
+    return { ok: true };
+  }
+
+  muteUser(userId: string): Result {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const me = this.state.session!.id;
+    if (me === userId) return { ok: false, error: 'You cannot mute yourself.' };
+    if ((this.state.mutes ?? []).some((m) => m.muterId === me && m.mutedId === userId)) return { ok: true };
+    const mutes: Mute[] = [...(this.state.mutes ?? []), { muterId: me, mutedId: userId, createdAt: now() }];
+    this.commit({ mutes });
+    return { ok: true };
+  }
+
+  unmuteUser(userId: string): Result {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const me = this.state.session!.id;
+    this.commit({ mutes: (this.state.mutes ?? []).filter((m) => !(m.muterId === me && m.mutedId === userId)) });
+    return { ok: true };
+  }
+
+  updatePrivacy(input: PrivacyInput): Result {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const me = this.state.session!.id;
+    const patch: Partial<Profile> = {};
+    if (input.visibility !== undefined) patch.visibility = input.visibility;
+    if (input.showJoinDate !== undefined) patch.showJoinDate = input.showJoinDate;
+    if (input.showFollowLists !== undefined) patch.showFollowLists = input.showFollowLists;
+    if (input.dmPermission !== undefined) patch.dmPermission = input.dmPermission;
+    if (input.cabinInvitePermission !== undefined) patch.cabinInvitePermission = input.cabinInvitePermission;
+    if (input.discoverable !== undefined) patch.discoverable = input.discoverable;
+    this.commit({ profiles: this.state.profiles.map((p) => (p.id === me ? { ...p, ...patch } : p)) });
     return { ok: true };
   }
 
@@ -1176,6 +1314,14 @@ export class DemoProvider implements DataProvider {
     if (isBlockedPair(this.state, me, otherId)) return { ok: false, error: 'You cannot message a blocked user.' };
     const other = profileById(this.state, otherId);
     if (!other?.username) return { ok: false, error: 'User not found.' };
+    // PRV-05: mirror of the messages_insert_member policy gate.
+    if (!dmAllows(this.state, me, otherId)) {
+      const perm = other.dmPermission ?? 'everyone';
+      return {
+        ok: false,
+        error: perm === 'nobody' ? 'This person isn’t accepting messages.' : 'This person only accepts messages from followers.',
+      };
+    }
 
     const existing = this.state.conversations.find((c) => c.memberIds.length === 2 && c.memberIds.includes(me) && c.memberIds.includes(otherId));
     if (existing) return { ok: true, conversationId: existing.id };
@@ -1346,6 +1492,14 @@ const mapProfile = (r: Row): Profile => ({
   role: r.role === 'admin' ? 'admin' : 'user',
   isSuspended: r.is_suspended === true,
   createdAt: rAt(r.created_at),
+  // Workstream E (PRV-01/04/05/06/09): DB rows always carry these; defaults
+  // are expressed as undefined-tolerant accessors so seed literals still type-check.
+  visibility: (r.visibility as Profile['visibility']) ?? 'public',
+  showJoinDate: r.show_join_date !== false,
+  showFollowLists: r.show_follow_lists !== false,
+  dmPermission: (r.dm_permission as Profile['dmPermission']) ?? 'everyone',
+  cabinInvitePermission: (r.cabin_invite_permission as Profile['cabinInvitePermission']) ?? 'everyone',
+  discoverable: r.discoverable !== false,
 });
 const mapPost = (r: Row): Post => ({
   id: rs(r.id),
@@ -1373,6 +1527,13 @@ const mapLike = (r: Row): LikeRow => ({ userId: rs(r.user_id), postId: rs(r.post
 const mapFollow = (r: Row): Follow => ({
   followerId: rs(r.follower_id),
   followingId: rs(r.following_id),
+  status: r.status === 'pending' ? 'pending' : 'accepted', // PRV-03
+  createdAt: rAt(r.created_at),
+});
+
+const mapMute = (r: Row): Mute => ({
+  muterId: rs(r.muter_id),
+  mutedId: rs(r.muted_id),
   createdAt: rAt(r.created_at),
 });
 const mapSave = (r: Row): Save => ({ userId: rs(r.user_id), postId: rs(r.post_id), createdAt: rAt(r.created_at) });
@@ -1488,7 +1649,7 @@ class SupabaseProvider implements DataProvider {
       return (data as Row[]) ?? [];
     };
     try {
-      const [profiles, posts, comments, follows, likes, saves, reposts, blocks, stories, notifications, reports, conversations, prefs] =
+      const [profiles, posts, comments, follows, likes, saves, reposts, blocks, mutes, stories, notifications, reports, conversations, prefs] =
         await Promise.all([
           rows(sb.from('profiles').select('*').limit(5000)),
           rows(sb.from('posts').select('*').order('created_at', { ascending: false }).limit(1000)),
@@ -1498,6 +1659,7 @@ class SupabaseProvider implements DataProvider {
           rows(sb.from('saves').select('*').eq('user_id', uid).limit(5000)),
           rows(sb.from('reposts').select('*').limit(5000)),
           rows(sb.from('blocks').select('*').limit(5000)),
+          rows(sb.from('mutes').select('*').eq('muter_id', uid).limit(1000)), // PRV-08
           rows(sb.from('stories').select('*').limit(500)),
           rows(sb.from('notifications').select('*').order('created_at', { ascending: false }).limit(300)),
           rows(sb.from('reports').select('*').order('created_at', { ascending: false }).limit(500)),
@@ -1528,6 +1690,7 @@ class SupabaseProvider implements DataProvider {
         saves: saves.map(mapSave),
         reposts: reposts.map(mapRepost),
         blocks: blocks.map(mapBlock),
+        mutes: mutes.map(mapMute),
         stories: stories.map(mapStory),
         notifications: notifications.map(mapNotif),
         mutedNotifications: (prefs[0]?.muted_types as string[] | undefined) ?? [],
@@ -2018,6 +2181,7 @@ class SupabaseProvider implements DataProvider {
     const existing = this.state.follows.find((f) => f.followerId === meId && f.followingId === userId);
     const before = this.state;
     if (existing) {
+      // Unfollow, or cancel a pending request (same row, same button).
       this.commit({ follows: this.state.follows.filter((f) => !(f.followerId === meId && f.followingId === userId)) });
       try {
         const { error } = await this.sb.from('follows').delete().eq('follower_id', meId).eq('following_id', userId);
@@ -2029,9 +2193,123 @@ class SupabaseProvider implements DataProvider {
         return { ok: false, error: friendlyError(e) };
       }
     }
-    this.commit({ follows: [{ followerId: meId, followingId: userId, createdAt: now() }, ...this.state.follows] });
+    // PRV-03: the server trigger downgrades to 'pending' for private accounts;
+    // we set it here too so the UI reflects the request immediately.
+    const status = target.visibility === 'private' ? 'pending' : 'accepted';
+    this.commit({ follows: [{ followerId: meId, followingId: userId, status, createdAt: now() }, ...this.state.follows] });
     try {
-      const { error } = await this.sb.from('follows').insert({ follower_id: meId, following_id: userId });
+      const { error } = await this.sb.from('follows').insert({ follower_id: meId, following_id: userId, status });
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async approveFollow(followerId: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    const before = this.state;
+    this.commit({
+      follows: this.state.follows.map((f) =>
+        f.followerId === followerId && f.followingId === meId ? { ...f, status: 'accepted' as const } : f,
+      ),
+    });
+    try {
+      // RLS: only following_id (= me) may approve; the UPDATE trigger sends
+      // follow_request_approved to the requester.
+      const { error } = await this.sb
+        .from('follows')
+        .update({ status: 'accepted' })
+        .eq('follower_id', followerId)
+        .eq('following_id', meId)
+        .eq('status', 'pending');
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async declineFollow(followerId: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    const before = this.state;
+    this.commit({ follows: this.state.follows.filter((f) => !(f.followerId === followerId && f.followingId === meId)) });
+    try {
+      const { error } = await this.sb
+        .from('follows')
+        .delete()
+        .eq('follower_id', followerId)
+        .eq('following_id', meId)
+        .eq('status', 'pending');
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async muteUser(userId: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    if (meId === userId) return { ok: false, error: 'You cannot mute yourself.' };
+    if ((this.state.mutes ?? []).some((m) => m.muterId === meId && m.mutedId === userId)) return { ok: true };
+    const before = this.state;
+    this.commit({ mutes: [...(this.state.mutes ?? []), { muterId: meId, mutedId: userId, createdAt: now() }] });
+    try {
+      const { error } = await this.sb.from('mutes').upsert({ muter_id: meId, muted_id: userId }, { onConflict: 'muter_id,muted_id' });
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async unmuteUser(userId: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    const before = this.state;
+    this.commit({ mutes: (this.state.mutes ?? []).filter((m) => !(m.muterId === meId && m.mutedId === userId)) });
+    try {
+      const { error } = await this.sb.from('mutes').delete().eq('muter_id', meId).eq('muted_id', userId);
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async updatePrivacy(input: PrivacyInput): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    const patch: Partial<Profile> = {};
+    const db: Record<string, unknown> = {};
+    if (input.visibility !== undefined) { patch.visibility = input.visibility; db.visibility = input.visibility; }
+    if (input.showJoinDate !== undefined) { patch.showJoinDate = input.showJoinDate; db.show_join_date = input.showJoinDate; }
+    if (input.showFollowLists !== undefined) { patch.showFollowLists = input.showFollowLists; db.show_follow_lists = input.showFollowLists; }
+    if (input.dmPermission !== undefined) { patch.dmPermission = input.dmPermission; db.dm_permission = input.dmPermission; }
+    if (input.cabinInvitePermission !== undefined) { patch.cabinInvitePermission = input.cabinInvitePermission; db.cabin_invite_permission = input.cabinInvitePermission; }
+    if (input.discoverable !== undefined) { patch.discoverable = input.discoverable; db.discoverable = input.discoverable; }
+    const before = this.state;
+    this.commit({ profiles: this.state.profiles.map((p) => (p.id === meId ? { ...p, ...patch } : p)) });
+    try {
+      const { error } = await this.sb.from('profiles').update(db).eq('id', meId);
       if (error) throw error;
       return { ok: true };
     } catch (e) {
@@ -2198,6 +2476,14 @@ class SupabaseProvider implements DataProvider {
     if (isBlockedPair(this.state, meId, otherId)) return { ok: false, error: 'You cannot message a blocked user.' };
     const other = profileById(this.state, otherId);
     if (!other?.username) return { ok: false, error: 'User not found.' };
+    // PRV-05: mirror of the conversation_members_insert_member policy gate.
+    if (!dmAllows(this.state, meId, otherId)) {
+      const perm = other.dmPermission ?? 'everyone';
+      return {
+        ok: false,
+        error: perm === 'nobody' ? 'This person isn’t accepting messages.' : 'This person only accepts messages from followers.',
+      };
+    }
 
     const existing = this.state.conversations.find(
       (c) => c.memberIds.length === 2 && c.memberIds.includes(meId) && c.memberIds.includes(otherId),

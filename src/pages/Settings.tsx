@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { LogOut, Trash2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import Avatar from '../components/Avatar';
 import ImageUploader from '../components/ImageUploader';
 import { toast } from '../components/Toast';
@@ -65,6 +65,20 @@ export default function Settings() {
   return (
     <div className="space-y-5">
       <h1 className="text-lg font-bold">Settings</h1>
+
+      {/* PRV-10: entry point to the privacy page (visibility, toggles, contact permissions). */}
+      <section className="card p-5">
+        <h2 className="font-semibold">Privacy &amp; safety</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Control who sees your posts, what your profile shows, and who can contact or invite you.
+        </p>
+        <Link
+          to="/settings/privacy"
+          className="tap44 mt-3 inline-flex items-center gap-2 rounded-full bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+        >
+          Open privacy settings
+        </Link>
+      </section>
 
       <section className="card p-5">
         <h2 className="font-semibold">Edit profile</h2>
