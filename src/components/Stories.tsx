@@ -102,8 +102,8 @@ export function StoryViewer({
           <span className="text-xs text-white/60">{timeAgo(story.createdAt)} ago</span>
           {isMine && (
             <button
-              onClick={() => {
-                const r = actions.deleteStory(story.id);
+              onClick={async () => {
+                const r = await actions.deleteStory(story.id);
                 if (r.ok) {
                   toast('Story deleted.', 'success');
                   onClose();

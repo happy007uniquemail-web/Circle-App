@@ -1,7 +1,8 @@
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MessageCircle, Search, Sparkles, Heart } from 'lucide-react';
+import { MessageCircle, Search, Sparkles, Heart, Loader2 } from 'lucide-react';
 import { currentUserProfile, useActions, useAppState } from '../lib/store';
-import type { Result } from '../lib/store';
+import { realBackend } from '../lib/supabase';
 
 function GoogleG() {
   return (
@@ -18,20 +19,55 @@ const FEATURES = [
   { icon: MessageCircle, title: 'Post in seconds', text: 'Share up to 500 characters and up to 4 photos — resize handled for you.' },
   { icon: Heart, title: 'Engage', text: 'Like and comment on posts from people you follow, with live counts.' },
   { icon: Search, title: 'Discover', text: 'Explore trending posts and search people by username or name.' },
-  { icon: Sparkles, title: 'One-click sign-in', text: 'Continue with Google — no passwords, no forms, straight to your feed.' },
+  realBackend
+    ? { icon: Sparkles, title: 'Secure sign-in', text: 'Continue with Google or email — accounts and data are handled by Supabase.' }
+    : { icon: Sparkles, title: 'One-click sign-in', text: 'Continue with Google — no passwords, no forms, straight to your feed.' },
 ];
 
-/** Public landing page with the Google sign-in button (AUTH-1). */
+type Notice = { kind: 'error' | 'info'; text: string } | null;
+
+/** Public landing page: Google (AUTH-1) + email/password sign-in on the live backend. */
 export default function Landing() {
   const actions = useActions();
   const state = useAppState();
   const navigate = useNavigate();
 
-  async function afterSignIn(result: Result | Promise<Result>) {
-    const r = await result;
-    if (!r.ok) return;
-    const profile = currentUserProfile(actions.getSnapshot());
-    navigate(profile?.username ? '/home' : '/onboarding');
+  const [mode, setMode] = useState<'in' | 'up'>('in');
+  const [email, setEmail] = useState('');
+  const [pw, setPw] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<Notice>(null);
+
+  const me = currentUserProfile(state);
+
+  // Forward signed-in visitors — including the Google / email-confirm return trip,
+  // which lands here with a session while the profile is still hydrating.
+  useEffect(() => {
+    if (!state.session || !me) return;
+    navigate(me.username ? '/home' : '/onboarding', { replace: true });
+  }, [state.session?.id, me?.username, state.profiles.length, navigate]);
+
+  async function google() {
+    setNotice(null);
+    const r = await actions.signInWithGoogle();
+    if (!r.ok) setNotice({ kind: 'error', text: r.error ?? 'Could not start Google sign-in.' });
+    // On success the browser navigates to Google (live) or the effect above routes the session (demo).
+  }
+
+  async function emailAuth(e: FormEvent) {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setNotice(null);
+    const r =
+      mode === 'in'
+        ? await actions.signInWithEmail(email.trim(), pw)
+        : await actions.signUpWithEmail(email.trim(), pw);
+    setBusy(false);
+    if (!r.ok) return setNotice({ kind: 'error', text: r.error ?? 'Could not continue.' });
+    if (actions.getSnapshot().session) return; // effect navigates
+    setMode('in');
+    setNotice({ kind: 'info', text: 'Almost there — check your inbox to confirm your email, then sign in.' });
   }
 
   return (
@@ -50,26 +86,79 @@ export default function Landing() {
       <main>
         <section className="mx-auto max-w-3xl px-4 pb-20 pt-16 text-center">
           <p className="mx-auto mb-4 w-fit rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs font-semibold text-brand-700 backdrop-blur-md">
-            MVP preview · demo mode
+            {realBackend ? 'Live · secure accounts' : 'MVP preview · demo mode'}
           </p>
           <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl">
             Your circle, <span className="text-brand-600">in one place.</span>
           </h1>
           <p className="mx-auto mt-4 max-w-xl text-lg text-slate-600">
-            Sign in with Google, follow a few people, and go from landing page to first post in under two minutes.
+            {realBackend
+              ? 'Create an account with Google or email, follow a few people, and make your first post in under two minutes.'
+              : 'Sign in with Google, follow a few people, and go from landing page to first post in under two minutes.'}
           </p>
 
-          <div className="mt-8 flex flex-col items-center gap-3">
-            <button onClick={() => afterSignIn(actions.signInWithGoogle())} className="btn-primary w-full max-w-xs py-3 text-base shadow-lg shadow-brand-600/20">
+          <div className="mx-auto mt-8 flex w-full max-w-xs flex-col items-center gap-3">
+            <button onClick={google} className="btn-primary w-full py-3 text-base shadow-lg shadow-brand-600/20">
               <GoogleG /> Continue with Google
             </button>
-            <button onClick={() => afterSignIn(actions.signInDemoAdmin())} className="btn-ghost text-xs text-slate-500">
-              Sign in as demo admin (view moderation queue)
-            </button>
-            <p className="text-xs text-slate-400">
-              Demo environment — no real Google account is contacted.
-              {state.session ? ' (Existing session restored.)' : ''}
-            </p>
+
+            {realBackend && (
+              <form onSubmit={emailAuth} className="card w-full space-y-2.5 p-4 text-left">
+                <input
+                  type="email"
+                  required
+                  autoComplete="email"
+                  placeholder="Email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="input w-full"
+                />
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  autoComplete={mode === 'in' ? 'current-password' : 'new-password'}
+                  placeholder="Password (min 6 characters)"
+                  value={pw}
+                  onChange={(e) => setPw(e.target.value)}
+                  className="input w-full"
+                />
+                <button type="submit" disabled={busy} className="btn-primary w-full py-2.5">
+                  {busy && <Loader2 size={16} className="animate-spin" />}
+                  {mode === 'in' ? 'Sign in' : 'Create account'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode(mode === 'in' ? 'up' : 'in');
+                    setNotice(null);
+                  }}
+                  className="w-full text-center text-xs font-medium text-brand-600 hover:underline"
+                >
+                  {mode === 'in' ? 'New here? Create an account' : 'Have an account? Sign in'}
+                </button>
+                {notice && (
+                  <p className={`text-xs ${notice.kind === 'error' ? 'text-red-500' : 'text-emerald-600'}`} role="status">
+                    {notice.text}
+                  </p>
+                )}
+              </form>
+            )}
+
+            {!realBackend && (
+              <>
+                <button onClick={() => void actions.signInDemoAdmin()} className="btn-ghost text-xs text-slate-500">
+                  Sign in as demo admin (view moderation queue)
+                </button>
+                <p className="text-xs text-slate-400">
+                  Demo environment — no real Google account is contacted.
+                  {state.session ? ' (Existing session restored.)' : ''}
+                </p>
+              </>
+            )}
+            {realBackend && !notice && (
+              <p className="text-xs text-slate-400">By continuing you agree to the Terms and Privacy Policy.</p>
+            )}
           </div>
         </section>
 

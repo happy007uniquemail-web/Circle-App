@@ -15,7 +15,7 @@ npm run build      # type-check + production bundle
 npm run preview    # serve the production build
 ```
 
-No configuration needed: the app boots in **demo mode** — a localStorage-backed data provider (`DemoProvider`) with seeded users, posts, comments, likes, open reports, stories, and a demo DM thread. Videos live in IndexedDB blobs (only a `vid:` key goes into localStorage) so the quota stays healthy.
+No configuration needed: the app boots in **demo mode** — a localStorage-backed data provider (`DemoProvider`) with seeded users, posts, comments, likes, open reports, stories, and a demo DM thread. Videos live in IndexedDB blobs (only a `vid:` key goes into localStorage) so the quota stays healthy. Set the Supabase env variables (see *Going live* below) and the identical build boots **`SupabaseProvider`** against your real backend instead.
 
 | Demo entry point | What it shows |
 |---|---|
@@ -34,8 +34,8 @@ In `npm run dev`, an activity simulator fires an incoming like/comment/repost/fo
 |---|---|
 | Frontend | React 18 + TypeScript + Vite + Tailwind CSS v4 |
 | Routing | React Router v6, lazy route chunks (route table mirrors PRD §7.1 + v2) |
-| Data | `DataProvider` contract → `DemoProvider` (local) / Supabase (production slot) |
-| Media | Images resized client-side (data URLs); videos ≤60 s stored as blobs in **IndexedDB** (`src/lib/media.ts`) |
+| Data | `DataProvider` contract → `DemoProvider` (local) / `SupabaseProvider` (live: Supabase Auth + PostgREST + Storage + Realtime) |
+| Media | Images resized client-side then uploaded to Supabase Storage; videos ≤60 s validated, then uploaded (demo mode keeps blobs in **IndexedDB**) |
 | Database | PostgreSQL schema + RLS in `supabase/migrations/0001_init.sql` + `0002_features.sql` |
 | Icons | lucide-react |
 
@@ -66,7 +66,8 @@ src/
                            /saved, /settings, /admin/reports, /terms, /privacy) — lazy chunks
   types.ts                 domain types (mirror the SQL schema) + limits
   lib/
-    store.ts               DataProvider contract, DemoProvider, feed/hashtag/story/DM selectors
+    store.ts               DataProvider contract, DemoProvider, SupabaseProvider, feed/hashtag/story/DM selectors
+    supabase.ts            live-backend client (env detection, storage uploads, error mapping)
     media.ts               IndexedDB video blobs, video validation, media downloads
     auth.tsx               ProtectedRoute / AdminRoute / PublicOnly guards
     rateLimit.ts           client-side rate limiting (posts, comments, follows, DMs, stories)
@@ -83,45 +84,46 @@ supabase/
   migrations/0002_features.sql reposts, saves, stories, conversations/messages, video +
                            hashtags columns, get_home_feed RPC, trending-hashtag RPC,
                            RLS for every new table, media bucket, Realtime publication
+  migrations/0003_admin_realtime.sql admin moderation policies, extra Realtime tables,
+                           scheduled story purge (pg_cron, guarded)
 ```
 
 ---
 
-## Switching to Supabase (production)
+## Going live with Supabase (production)
 
-The frontend only talks to the `DataProvider` interface (`src/lib/store.ts`). To go live:
+The app picks its provider at boot (`src/lib/store.ts` factory): with `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` configured it runs **`SupabaseProvider`** (real Auth/PostgREST/Storage/Realtime); without them it falls back to the offline **`DemoProvider`**. To go live:
 
-1. **Create a Supabase project** and apply both migrations (order matters):
+1. **Create a Supabase project** and apply the three migrations in order (SQL editor or CLI):
    ```bash
    supabase link --project-ref <ref>
-   supabase db push   # 0001_init.sql, then 0002_features.sql
+   supabase db push   # 0001_init.sql → 0002_features.sql → 0003_admin_realtime.sql
    ```
-   Then schedule the story purge — either enable **pg_cron** and run
-   `select cron.schedule('purge-stories', '17 * * * *', $$delete from stories where expires_at < now()$$);`
-   or call `purge_expired_stories()` from a scheduled Edge Function.
-2. **Google OAuth** (PRD §5.3 checklist):
-   - Create a *Web application* OAuth client in Google Cloud Console.
-   - Authorized redirect URI: `https://<project-ref>.supabase.co/auth/v1/callback`
-   - Authorized JS origins: your domain + `http://localhost:5173`
-   - Paste Client ID/Secret into Supabase Auth → Google provider; configure the consent screen.
-3. **Env vars** (`.env`):
+   `0003` adds admin moderation policies, streams posts/comments/stories/profiles over Realtime, and schedules the story purge when pg_cron is available.
+2. **Auth providers** (Supabase dashboard → Authentication):
+   - **Email**: enabled by default (password sign-up works immediately; decide whether to keep "Confirm email" on).
+   - **Google**: create a *Web application* OAuth client in Google Cloud Console →
+     - Authorized redirect URI: `https://<project-ref>.supabase.co/auth/v1/callback`
+     - Authorized JS origins: `https://<your-domain>` + `http://localhost:5173`
+     - Paste Client ID/Secret into Supabase Auth → Google provider; save.
+   - **URL configuration**: set Site URL to your production origin (e.g. `https://circyy.netlify.app`) and add `http://localhost:5173` to Redirect URLs so email-confirmation and OAuth return trips work locally.
+3. **Env vars** — local `.env` and the deploy host (Netlify → Site configuration → Environment variables):
    ```
    VITE_SUPABASE_URL=https://<project-ref>.supabase.co
    VITE_SUPABASE_ANON_KEY=<anon key>
    ```
-4. **Implement `SupabaseProvider`** against the same interface:
-   - Auth: `signInWithOAuth({ provider: 'google' })`, session in httpOnly/secure storage via the built-in flow.
-   - Reads: PostgREST selects + `get_home_feed` RPC (repost-aware cursor feed) + `get_trending_hashtags`.
-   - Writes: inserts/updates (RLS enforces ownership); storage uploads to `avatars/{uid}/`, `post-images/{uid}/`, `media/{uid}/` (videos).
-   - **Realtime**: subscribe after auth —
-     ```ts
-     channel(`rt:me:${uid}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `recipient_id=eq.${uid}` }, onNotif)
-     channel(`rt:conv:${convId}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${convId}` }, onMsg)
-     ```
-     The tables are already added to the `supabase_realtime` publication in `0002_features.sql`.
-5. Swap the singleton at the bottom of `store.ts` when env vars are present.
+   The anon key is safe to expose: every query goes through Row-Level Security.
+### How `SupabaseProvider` works
 
-RLS already encodes the security matrix from PRD §6.4: every table has policies; `notifications` inserts happen only via the `security definer` trigger; storage paths are scoped to `auth.uid()`.
+- **Hydration**: on sign-in it loads a complete `AppState` (profiles, recent posts/comments, the user's likes/saves, follows/reposts/blocks, live stories, notifications, reports, conversations + members + messages) so every existing selector, feed, and count keeps working. Caps: 1 000 posts / 2 000 comments / 5 000 graph rows / 300 notifications / 1 000 messages (newest).
+- **Mutations**: optimistic snapshot updates first, the PostgREST write second, rollback + user-facing toast on failure. Denormalized counters (`like_count`, `comment_count`, `repost_count`) are trigger-maintained in Postgres.
+- **Media**: `data:`/`vid:` refs are uploaded to `avatars/{uid}/`, `post-images/{uid}/`, `media/{uid}/` (public URLs stored in the rows); http(s) refs pass through untouched.
+- **Realtime**: one channel on the `supabase_realtime` publication → debounced re-hydration, so likes, follows, messages, notifications, and new posts appear live for everyone.
+- **Account deletion**: the client cannot delete auth users, so delete wipes all content rows and blanks the public profile ("Deleted user"), then signs out.
+
+Known scale-outs (fine at launch size, revisit with cursor RPCs/denormalized counters): full-profile hydration for search & counts, newest-1 000-message threads, and blocking hides content both ways but does not delete pre-existing DM history server-side.
+
+RLS encodes the security matrix from PRD §6.4: every table has policies; `notifications` inserts happen only via the `security definer` trigger; storage paths are scoped to `auth.uid()`.
 
 ---
 
@@ -145,8 +147,12 @@ RLS already encodes the security matrix from PRD §6.4: every table has policies
 - [ ] Deployed to production with HTTPS, backups, legal pages — **ops step**: Netlify/Vercel + Supabase (checklist below)
 
 ### Deploy checklist
-- [ ] Netlify/Vercel site connected to the repo (`npm run build`, publish `dist`)
-- [ ] Supabase project + migration applied; Google OAuth verified (start early — PRD risk)
+- [x] Netlify site connected to the repo (`npm run build`, publish `dist`, SPA redirect) — https://circyy.netlify.app
+- [ ] Disable Netlify password protection (site must be publicly reachable)
+- [ ] Supabase project created; all three migrations applied (`0001` → `0002` → `0003`)
+- [ ] Supabase Auth: Email provider on; Google OAuth client created + callback/origins whitelisted
+- [ ] Supabase URL configuration: Site URL = production origin, localhost:5173 in Redirect URLs
+- [ ] `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` set in Netlify environment variables, then redeploy
 - [ ] Daily database backups enabled (dashboard → backups)
 - [ ] Custom domain + HTTPS; CSP headers
 - [ ] `/terms` and `/privacy` published (already in the bundle)

@@ -129,3 +129,25 @@ Scope added beyond PRD v1.0 at product owner request (PRD §1.4 non-goals supers
 | **V2-3 Stories** | Story ring, viewer, composer, expiry | ✅ verified (incl. text-story creation) |
 | **V2-4 DM + realtime** | Messages pages, nav badges, simulator, Message button | ✅ verified (share→DM round-trip) |
 | **V2-5 Harden** | SQL `0002_features.sql`, safety limits, lazy routes, build + walkthrough verification | ✅ build green, 12 route chunks |
+
+---
+
+## V3 — Real web application (live backend)
+
+Product owner directive: the deployed app must be a real web application, not an MVP demo mode. The DataProvider contract stays the seam; a second implementation now runs against Supabase.
+
+| Piece | Design decisions |
+|---|---|
+| **Provider selection** | Boot-time factory in store.ts: VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY present (and not template placeholders) → SupabaseProvider, else DemoProvider. Same build, both modes. |
+| **Contract widening** | DataProvider methods return MaybePromise<Result> (queries MaybePromise<FeedPage/Profile[]>); demo stays sync-valid, pages already wait + toast errors. New: signUpWithEmail / signInWithEmail. |
+| **Auth (AUTH-1)** | Google OAuth (full-page redirect via signInWithOAuth + edirectTo: origin) and email/password (signUp/signInWithPassword, confirm-email flow surfaced in the UI). Landing auto-forwards signed-in users to /home or /onboarding once the profile hydrates — covers the OAuth/email-confirm return trip. |
+| **Hydration** | Complete AppState on sign-in (profiles, recent posts/comments, own likes/saves, follows/reposts/blocks, live stories, own notifications/reports, conversations+members+messages) so every selector, feed, count, and badge keeps working unchanged. Caps: 1 000 posts / 2 000 comments / 5 000 graph / 300 notifications / 1 000 messages. |
+| **Mutations** | Optimistic snapshot commit → PostgREST write (triggers maintain denormalized counters + create notifications) → rollback + toast on failure. Media refs uploaded to vatars/, post-images/, media/ buckets; http(s) refs pass through. |
+| **Realtime (F-RT)** | One channel on the supabase_realtime publication ( 003 adds posts/comments/stories/profiles) → debounced (750 ms) re-hydration: likes, follows, reposts, messages, notifications, new posts appear live. |
+| **Safety parity** | All client guards kept; RLS is the enforcement layer.  003 adds the admin profiles-update policy (suspend/restore) and admin visibility of soft-deleted posts for the moderation queue. Account deletion wipes content rows + blanks the profile (client cannot delete auth users). |
+| **Known scale-outs** | Full-profile hydration for search/counts, newest-1 000 messages per account, block hides content both ways but keeps pre-existing DM history — revisit with cursor RPCs + denormalized counters as usage grows. |
+
+| Phase | Scope | Status |
+|---|---|---|
+| **V3-1 Backend code** | supabase.ts client/uploads/errors, SupabaseProvider (auth/hydrate/mutations/realtime), email auth UI,  003 migration | ✅ build green, demo parity verified in browser |
+| **V3-2 Live wiring** | User creates Supabase project, runs  001– 003, configures Email + Google providers, pastes env vars (local + Netlify), disables site password protection | ⏳ blocked on user credentials |

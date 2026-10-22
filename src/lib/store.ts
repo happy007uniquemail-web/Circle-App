@@ -19,6 +19,7 @@ import type {
   FeedItem,
   FeedPage,
   Follow,
+  LikeRow,
   MediaKind,
   Message,
   Post,
@@ -36,6 +37,8 @@ import { LIMITS } from '../types';
 import { avatarFor, countLinks, extractHashtags, svgImage } from './format';
 import { deleteVideo } from './media';
 import { checkLimit } from './rateLimit';
+import { friendlyError, realBackend, supabase, uploadImages, uploadRef } from './supabase';
+import type { Session, SupabaseClient } from '@supabase/supabase-js';
 
 export type { Result };
 
@@ -56,38 +59,43 @@ export interface StoryInput {
   caption: string;
 }
 
+/** Sync today (DemoProvider), async when backed by the network (SupabaseProvider). */
+export type MaybePromise<T> = T | Promise<T>;
+
 export interface DataProvider {
   subscribe(cb: () => void): () => void;
   getSnapshot(): AppState;
-  signInWithGoogle(): Result;
-  signInDemoAdmin(): Result;
-  signOut(): Result;
-  completeOnboarding(input: OnboardingInput): Result;
-  updateProfile(input: OnboardingInput): Result;
-  deleteAccount(): Result;
-  createPost(body: string, imageUrls: string[], videoUrl?: string | null): Result;
-  editPost(postId: string, body: string): Result;
-  deletePost(postId: string): Result;
-  toggleLike(postId: string): Result;
-  toggleRepost(postId: string): Result;
-  toggleSave(postId: string): Result;
-  addComment(postId: string, body: string, imageUrls?: string[]): Result;
-  deleteComment(commentId: string): Result;
-  toggleFollow(userId: string): Result;
-  blockUser(userId: string): Result;
-  unblockUser(userId: string): Result;
-  submitReport(targetType: ReportTarget, targetId: string, reason: ReportReason, details: string | null): Result;
-  resolveReport(reportId: string, status: 'dismissed' | 'actioned'): Result;
-  markNotificationsRead(): Result;
-  setSuspended(userId: string, suspended: boolean): Result;
-  createStory(input: StoryInput): Result;
-  deleteStory(storyId: string): Result;
-  startConversation(otherId: string): ConversationResult;
-  sendMessage(conversationId: string, body: string, media: { kind: MediaKind; ref: string } | null, postId: string | null): Result;
-  markConversationRead(conversationId: string): Result;
-  getFollowingFeed(cursor: string | null, limit?: number): FeedPage;
-  getExploreFeed(cursor: string | null, limit?: number): FeedPage;
-  searchUsers(q: string, limit?: number): Profile[];
+  signInWithGoogle(): MaybePromise<Result>;
+  signUpWithEmail(email: string, password: string): MaybePromise<Result>;
+  signInWithEmail(email: string, password: string): MaybePromise<Result>;
+  signInDemoAdmin(): MaybePromise<Result>;
+  signOut(): MaybePromise<Result>;
+  completeOnboarding(input: OnboardingInput): MaybePromise<Result>;
+  updateProfile(input: OnboardingInput): MaybePromise<Result>;
+  deleteAccount(): MaybePromise<Result>;
+  createPost(body: string, imageUrls: string[], videoUrl?: string | null): MaybePromise<Result>;
+  editPost(postId: string, body: string): MaybePromise<Result>;
+  deletePost(postId: string): MaybePromise<Result>;
+  toggleLike(postId: string): MaybePromise<Result>;
+  toggleRepost(postId: string): MaybePromise<Result>;
+  toggleSave(postId: string): MaybePromise<Result>;
+  addComment(postId: string, body: string, imageUrls?: string[]): MaybePromise<Result>;
+  deleteComment(commentId: string): MaybePromise<Result>;
+  toggleFollow(userId: string): MaybePromise<Result>;
+  blockUser(userId: string): MaybePromise<Result>;
+  unblockUser(userId: string): MaybePromise<Result>;
+  submitReport(targetType: ReportTarget, targetId: string, reason: ReportReason, details: string | null): MaybePromise<Result>;
+  resolveReport(reportId: string, status: 'dismissed' | 'actioned'): MaybePromise<Result>;
+  markNotificationsRead(): MaybePromise<Result>;
+  setSuspended(userId: string, suspended: boolean): MaybePromise<Result>;
+  createStory(input: StoryInput): MaybePromise<Result>;
+  deleteStory(storyId: string): MaybePromise<Result>;
+  startConversation(otherId: string): MaybePromise<ConversationResult>;
+  sendMessage(conversationId: string, body: string, media: { kind: MediaKind; ref: string } | null, postId: string | null): MaybePromise<Result>;
+  markConversationRead(conversationId: string): MaybePromise<Result>;
+  getFollowingFeed(cursor: string | null, limit?: number): MaybePromise<FeedPage>;
+  getExploreFeed(cursor: string | null, limit?: number): MaybePromise<FeedPage>;
+  searchUsers(q: string, limit?: number): MaybePromise<Profile[]>;
   /** DEV-only: fabricates an incoming like/comment/follow to exercise realtime UI. */
   simulateIncomingActivity(): string | null;
 }
@@ -737,6 +745,14 @@ export class DemoProvider implements DataProvider {
     return { ok: true };
   }
 
+  signUpWithEmail(): Result {
+    return { ok: false, error: 'Email sign-in runs on the live backend (configure the Supabase env vars).' };
+  }
+
+  signInWithEmail(): Result {
+    return { ok: false, error: 'Email sign-in runs on the live backend (configure the Supabase env vars).' };
+  }
+
   signInDemoAdmin(): Result {
     const session: SessionUser = {
       id: 'p_admin',
@@ -1294,9 +1310,979 @@ export class DemoProvider implements DataProvider {
   }
 }
 
+/* ------------------------------------------------------------- supabase */
+
+type Row = Record<string, unknown>;
+const rs = (v: unknown): string => (typeof v === 'string' ? v : '');
+const rn = (v: unknown): number => (typeof v === 'number' ? v : 0);
+const rOrNull = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+const rArr = (v: unknown): string[] => (Array.isArray(v) ? (v.filter((x) => typeof x === 'string') as string[]) : []);
+const rAt = (v: unknown): string => (typeof v === 'string' ? v : now());
+
+const mapProfile = (r: Row): Profile => ({
+  id: rs(r.id),
+  username: rOrNull(r.username),
+  displayName: rs(r.display_name),
+  bio: rs(r.bio),
+  avatarUrl: rs(r.avatar_url),
+  role: r.role === 'admin' ? 'admin' : 'user',
+  isSuspended: r.is_suspended === true,
+  createdAt: rAt(r.created_at),
+});
+const mapPost = (r: Row): Post => ({
+  id: rs(r.id),
+  authorId: rs(r.author_id),
+  body: rs(r.body),
+  imageUrls: rArr(r.image_urls),
+  videoUrl: rOrNull(r.video_url),
+  hashtags: rArr(r.hashtags),
+  likeCount: rn(r.like_count),
+  commentCount: rn(r.comment_count),
+  repostCount: rn(r.repost_count),
+  editedAt: rOrNull(r.edited_at),
+  deletedAt: rOrNull(r.deleted_at),
+  createdAt: rAt(r.created_at),
+});
+const mapComment = (r: Row): Comment => ({
+  id: rs(r.id),
+  postId: rs(r.post_id),
+  authorId: rs(r.author_id),
+  body: rs(r.body),
+  imageUrls: rArr(r.image_urls),
+  createdAt: rAt(r.created_at),
+});
+const mapLike = (r: Row): LikeRow => ({ userId: rs(r.user_id), postId: rs(r.post_id), createdAt: rAt(r.created_at) });
+const mapFollow = (r: Row): Follow => ({
+  followerId: rs(r.follower_id),
+  followingId: rs(r.following_id),
+  createdAt: rAt(r.created_at),
+});
+const mapSave = (r: Row): Save => ({ userId: rs(r.user_id), postId: rs(r.post_id), createdAt: rAt(r.created_at) });
+const mapRepost = (r: Row): Repost => ({ userId: rs(r.user_id), postId: rs(r.post_id), createdAt: rAt(r.created_at) });
+const mapBlock = (r: Row): Block => ({
+  blockerId: rs(r.blocker_id),
+  blockedId: rs(r.blocked_id),
+  createdAt: rAt(r.created_at),
+});
+const mapStory = (r: Row): Story => ({
+  id: rs(r.id),
+  userId: rs(r.user_id),
+  kind: rs(r.kind) as Story['kind'],
+  media: rOrNull(r.media),
+  caption: rs(r.caption),
+  createdAt: rAt(r.created_at),
+  expiresAt: rAt(r.expires_at),
+});
+const mapNotif = (r: Row): AppNotification => ({
+  id: rs(r.id),
+  recipientId: rs(r.recipient_id),
+  actorId: rs(r.actor_id),
+  type: rs(r.type) as AppNotification['type'],
+  postId: rOrNull(r.post_id),
+  readAt: rOrNull(r.read_at),
+  createdAt: rAt(r.created_at),
+});
+const mapReport = (r: Row): Report => ({
+  id: rs(r.id),
+  reporterId: rs(r.reporter_id),
+  targetType: rs(r.target_type) as ReportTarget,
+  targetId: rs(r.target_id),
+  reason: rs(r.reason) as ReportReason,
+  details: rOrNull(r.details),
+  status: rs(r.status) as Report['status'],
+  createdAt: rAt(r.created_at),
+});
+const mapMessage = (r: Row): Message => ({
+  id: rs(r.id),
+  conversationId: rs(r.conversation_id),
+  senderId: rs(r.sender_id),
+  body: rs(r.body),
+  mediaKind: rOrNull(r.media_kind) as MediaKind | null,
+  mediaRef: rOrNull(r.media),
+  postId: rOrNull(r.post_id),
+  createdAt: rAt(r.created_at),
+  readAt: rOrNull(r.read_at),
+});
+
+/**
+ * Production provider — Supabase Auth + PostgREST + Storage + Realtime.
+ *
+ * Hydrates a complete `AppState` so every existing selector keeps working,
+ * applies mutations optimistically against that snapshot (rolling back on
+ * server errors, which pages already surface via toast), and reconciles with
+ * a debounced re-hydration whenever realtime reports a change. Row-Level
+ * Security in `supabase/migrations` enforces the real security matrix.
+ */
+class SupabaseProvider implements DataProvider {
+  private listeners = new Set<() => void>();
+  private state: AppState = EMPTY_STATE;
+  private uid: string | null = null;
+  private refreshTimer: number | null = null;
+  private channel: ReturnType<SupabaseClient['channel']> | null = null;
+
+  constructor(private sb: SupabaseClient) {
+    void this.bootstrap();
+    this.sb.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        this.teardown();
+        this.commit({ session: null });
+        return;
+      }
+      if (session && session.user.id !== this.uid) void this.signInAs(session);
+    });
+  }
+
+  private async bootstrap(): Promise<void> {
+    const { data } = await this.sb.auth.getSession();
+    if (data.session && data.session.user.id !== this.uid) await this.signInAs(data.session);
+  }
+
+  private async signInAs(session: Session): Promise<void> {
+    const user = session.user;
+    this.uid = user.id;
+    const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
+    this.state = {
+      ...EMPTY_STATE,
+      session: {
+        id: user.id,
+        email: rs(user.email),
+        name: rs(meta.full_name ?? meta.name) || rs(user.email).split('@')[0] || 'Circle user',
+        picture: rs(meta.avatar_url ?? meta.picture),
+      },
+    };
+    this.emit(); // signed-in shell renders immediately; data follows
+    await this.hydrate();
+    this.attachRealtime();
+  }
+
+  /** Fetch everything the selectors read (caps documented in README). */
+  private async hydrate(): Promise<void> {
+    const uid = this.uid;
+    if (!uid) return;
+    const sb = this.sb;
+    const rows = async (q: PromiseLike<{ data: unknown; error: { message: string } | null }>): Promise<Row[]> => {
+      const { data, error } = await q;
+      if (error) throw new Error(friendlyError(error));
+      return (data as Row[]) ?? [];
+    };
+    try {
+      const [profiles, posts, comments, follows, likes, saves, reposts, blocks, stories, notifications, reports, conversations] =
+        await Promise.all([
+          rows(sb.from('profiles').select('*').limit(5000)),
+          rows(sb.from('posts').select('*').order('created_at', { ascending: false }).limit(1000)),
+          rows(sb.from('comments').select('*').order('created_at', { ascending: false }).limit(2000)),
+          rows(sb.from('follows').select('*').limit(5000)),
+          rows(sb.from('likes').select('*').eq('user_id', uid).limit(5000)),
+          rows(sb.from('saves').select('*').eq('user_id', uid).limit(5000)),
+          rows(sb.from('reposts').select('*').limit(5000)),
+          rows(sb.from('blocks').select('*').limit(5000)),
+          rows(sb.from('stories').select('*').limit(500)),
+          rows(sb.from('notifications').select('*').order('created_at', { ascending: false }).limit(300)),
+          rows(sb.from('reports').select('*').order('created_at', { ascending: false }).limit(500)),
+          rows(sb.from('conversations').select('*').order('created_at', { ascending: false }).limit(500)),
+        ]);
+      const convIds = conversations.map((c) => rs(c.id));
+      const [memberRows, messageRows]: [Row[], Row[]] = convIds.length
+        ? await Promise.all([
+            rows(sb.from('conversation_members').select('*').in('conversation_id', convIds).limit(2000)),
+            rows(
+              sb.from('messages').select('*').in('conversation_id', convIds).order('created_at', { ascending: false }).limit(1000),
+            ),
+          ])
+        : [[], []];
+      const memberIds = new Map<string, string[]>();
+      for (const m of memberRows) {
+        const cid = rs(m.conversation_id);
+        memberIds.set(cid, [...(memberIds.get(cid) ?? []), rs(m.user_id)]);
+      }
+      this.state = {
+        ...this.state, // keep session (+ any in-flight optimistic write)
+        profiles: profiles.map(mapProfile),
+        posts: posts.map(mapPost),
+        comments: comments.map(mapComment),
+        follows: follows.map(mapFollow),
+        likes: likes.map(mapLike),
+        saves: saves.map(mapSave),
+        reposts: reposts.map(mapRepost),
+        blocks: blocks.map(mapBlock),
+        stories: stories.map(mapStory),
+        notifications: notifications.map(mapNotif),
+        reports: reports.map(mapReport),
+        conversations: conversations.map((c) => ({
+          id: rs(c.id),
+          memberIds: memberIds.get(rs(c.id)) ?? [],
+          createdAt: rAt(c.created_at),
+        })),
+        messages: messageRows.map(mapMessage).reverse(), // stored oldest → newest (DemoProvider parity)
+      };
+      this.emit();
+    } catch (e) {
+      console.error('[circle] hydrate failed:', e);
+    }
+  }
+
+  /** Realtime events → debounced full refresh (simple, always consistent). */
+  private attachRealtime(): void {
+    if (this.channel) return;
+    const ch = this.sb.channel(`rt:${this.uid}`);
+    for (const table of ['notifications', 'messages', 'likes', 'follows', 'reposts', 'posts', 'comments', 'stories', 'profiles'] as const) {
+      ch.on('postgres_changes', { event: '*', schema: 'public', table }, () => this.scheduleRefresh());
+    }
+    ch.subscribe();
+    this.channel = ch;
+  }
+
+  private scheduleRefresh(): void {
+    if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
+    this.refreshTimer = window.setTimeout(() => {
+      this.refreshTimer = null;
+      void this.hydrate();
+    }, 750);
+  }
+
+  private teardown(): void {
+    if (this.refreshTimer !== null) {
+      window.clearTimeout(this.refreshTimer);
+      this.refreshTimer = null;
+    }
+    if (this.channel) {
+      void this.sb.removeChannel(this.channel);
+      this.channel = null;
+    }
+    this.uid = null;
+  }
+
+  /* --- store plumbing (DemoProvider parity) --- */
+  private commit(next: Partial<AppState>) {
+    this.state = { ...this.state, ...next };
+    this.emit();
+  }
+  private emit() {
+    for (const cb of this.listeners) cb();
+  }
+  subscribe = (cb: () => void) => {
+    this.listeners.add(cb);
+    return () => {
+      this.listeners.delete(cb);
+    };
+  };
+  getSnapshot = (): AppState => this.state;
+
+  private me(): Profile | null {
+    return currentUserProfile(this.state);
+  }
+  private requireAuth(): Result {
+    if (!this.state.session) return { ok: false, error: 'Please sign in first.' };
+    return { ok: true };
+  }
+  private requireActive(): Result {
+    const auth = this.requireAuth();
+    if (!auth.ok) return auth;
+    const me = this.me();
+    if (!me) return { ok: false, error: 'Profile not found.' };
+    if (me.isSuspended) return { ok: false, error: 'Your account is suspended. Contact support.' };
+    return { ok: true };
+  }
+  /** Spam guard (F-SAF): same content by the same author inside 10 minutes. */
+  private isDuplicate(authorId: string, text: string): boolean {
+    const norm = text.trim().toLowerCase();
+    if (norm.length < 8) return false;
+    const recent = Date.now() - 10 * 60_000;
+    const hit = (t: string, at: string) => t.trim().toLowerCase() === norm && new Date(at).getTime() > recent;
+    return (
+      this.state.posts.some((p) => p.authorId === authorId && hit(p.body, p.createdAt)) ||
+      this.state.comments.some((c) => c.authorId === authorId && hit(c.body, c.createdAt)) ||
+      this.state.messages.some((m) => m.senderId === authorId && hit(m.body, m.createdAt))
+    );
+  }
+
+  /* --- auth (AUTH-1..6) --- */
+  async signInWithGoogle(): Promise<Result> {
+    const { data, error } = await this.sb.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) return { ok: false, error: friendlyError(error) };
+    if (data.url) window.location.assign(data.url); // full-page OAuth flow
+    return { ok: true };
+  }
+
+  async signUpWithEmail(email: string, password: string): Promise<Result> {
+    const { error } = await this.sb.auth.signUp({ email: email.trim(), password });
+    if (error) return { ok: false, error: friendlyError(error) };
+    return { ok: true }; // session → the Landing effect routes; else confirm-email flow
+  }
+
+  async signInWithEmail(email: string, password: string): Promise<Result> {
+    const { error } = await this.sb.auth.signInWithPassword({ email: email.trim(), password });
+    if (error) return { ok: false, error: friendlyError(error) };
+    return { ok: true };
+  }
+
+  signInDemoAdmin(): Result {
+    return { ok: false, error: 'Demo sign-in is not available on the live app.' };
+  }
+
+  async signOut(): Promise<Result> {
+    const { error } = await this.sb.auth.signOut();
+    this.teardown();
+    this.commit({ session: null });
+    return error ? { ok: false, error: friendlyError(error) } : { ok: true };
+  }
+
+  /* --- onboarding / profile (PROF-1..4, MOD-5) --- */
+  completeOnboarding(input: OnboardingInput): Promise<Result> {
+    return this.applyProfileUpdate(input);
+  }
+  updateProfile(input: OnboardingInput): Promise<Result> {
+    return this.applyProfileUpdate(input);
+  }
+
+  private async applyProfileUpdate(input: OnboardingInput): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    if (!/^[a-zA-Z0-9_]{3,20}$/.test(input.username)) {
+      return { ok: false, error: 'Username must be 3–20 letters, numbers, or underscores.' };
+    }
+    if (input.displayName.trim().length < 1 || input.displayName.length > LIMITS.displayNameMax) {
+      return { ok: false, error: `Display name must be 1–${LIMITS.displayNameMax} characters.` };
+    }
+    if (input.bio.length > LIMITS.bioMax) return { ok: false, error: `Bio must be ${LIMITS.bioMax} characters or fewer.` };
+    const taken = this.state.profiles.some(
+      (p) => p.id !== meId && p.username?.toLowerCase() === input.username.toLowerCase(),
+    );
+    if (taken) return { ok: false, error: 'That username is already taken.' };
+
+    let avatarUrl = input.avatarUrl?.trim() || this.me()?.avatarUrl || '';
+    try {
+      if (avatarUrl && !/^https?:\/\//.test(avatarUrl)) avatarUrl = await uploadRef(avatarUrl, 'avatars', meId);
+    } catch (e) {
+      return { ok: false, error: friendlyError(e) };
+    }
+    const displayName = input.displayName.trim();
+    const bio = input.bio.trim();
+    const { error } = await this.sb
+      .from('profiles')
+      .update({ username: input.username, display_name: displayName, bio, avatar_url: avatarUrl || null })
+      .eq('id', meId);
+    if (error) return { ok: false, error: friendlyError(error) };
+
+    const current = this.me();
+    const updated: Profile = {
+      id: meId,
+      username: input.username,
+      displayName,
+      bio,
+      avatarUrl: avatarUrl || current?.avatarUrl || '',
+      role: current?.role ?? 'user',
+      isSuspended: current?.isSuspended ?? false,
+      createdAt: current?.createdAt ?? now(),
+    };
+    this.commit({
+      profiles: current ? this.state.profiles.map((p) => (p.id === meId ? updated : p)) : [...this.state.profiles, updated],
+      session: this.state.session ? { ...this.state.session, name: displayName, picture: updated.avatarUrl } : null,
+    });
+    return { ok: true };
+  }
+
+  async deleteAccount(): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    const run = async (q: PromiseLike<{ error: { message: string } | null }>): Promise<void> => {
+      const { error } = await q;
+      if (error) throw new Error(friendlyError(error));
+    };
+    const or = (col: string) => `${col}.eq.${meId}`;
+    try {
+      await run(this.sb.from('posts').delete().eq('author_id', meId)); // cascades comments/likes/reposts/saves
+      await run(this.sb.from('stories').delete().eq('user_id', meId));
+      await run(this.sb.from('saves').delete().eq('user_id', meId));
+      await run(this.sb.from('reposts').delete().eq('user_id', meId));
+      await run(this.sb.from('follows').delete().or(`${or('follower_id')},${or('following_id')}`));
+      await run(this.sb.from('blocks').delete().or(`${or('blocker_id')},${or('blocked_id')}`));
+      await run(this.sb.from('notifications').delete().or(`${or('recipient_id')},${or('actor_id')}`));
+      await run(this.sb.from('reports').delete().eq('reporter_id', meId));
+      // Keep the auth user, blank the public profile — signing up again restarts onboarding.
+      await run(
+        this.sb
+          .from('profiles')
+          .update({ username: null, display_name: 'Deleted user', bio: '', avatar_url: null })
+          .eq('id', meId),
+      );
+      await this.sb.auth.signOut();
+      this.teardown();
+      this.commit({ ...EMPTY_STATE });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  /* --- posts (POST-1..5, MOD-4, F-VID, F-HAS, F-SAF) --- */
+  async createPost(body: string, imageUrls: string[], videoUrl: string | null = null): Promise<Result> {
+    const guard = this.requireActive();
+    if (!guard.ok) return guard;
+    if (!checkLimit('post', 5, 10 * 60_000)) return { ok: false, error: 'Slow down — posting limit reached (5 per 10 min).' };
+    const text = body.trim();
+    if (text.length > LIMITS.postMax) return { ok: false, error: `Posts must be ${LIMITS.postMax} characters or fewer.` };
+    if (!text && !imageUrls.length && !videoUrl) return { ok: false, error: 'Posts need text, a photo, or a video.' };
+    if (imageUrls.length > LIMITS.imagesPerPost) return { ok: false, error: `Up to ${LIMITS.imagesPerPost} images per post.` };
+    if (videoUrl && imageUrls.length) return { ok: false, error: 'A post has either a video or photos — not both.' };
+    if (countLinks(text) > LIMITS.linksPerPost) return { ok: false, error: `At most ${LIMITS.linksPerPost} links per post.` };
+    const hashtags = extractHashtags(text);
+    if ((text.match(/#[\p{L}\p{N}_]+/gu) ?? []).length > LIMITS.hashtagsPerPost) {
+      return { ok: false, error: `At most ${LIMITS.hashtagsPerPost} hashtags per post.` };
+    }
+    if (this.isDuplicate(this.state.session!.id, text)) return { ok: false, error: 'Looks like you just posted that.' };
+
+    const meId = this.state.session!.id;
+    try {
+      const [images, video] = await Promise.all([
+        imageUrls.length ? uploadImages(imageUrls, 'post-images', meId) : Promise.resolve([] as string[]),
+        videoUrl ? uploadRef(videoUrl, 'media', meId) : Promise.resolve(null as string | null),
+      ]);
+      const { data, error } = await this.sb
+        .from('posts')
+        .insert({ author_id: meId, body: text, image_urls: images, video_url: video, hashtags })
+        .select()
+        .single();
+      if (error) return { ok: false, error: friendlyError(error) };
+      this.commit({ posts: [mapPost(data as Row), ...this.state.posts] });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async editPost(postId: string, body: string): Promise<Result> {
+    const guard = this.requireActive();
+    if (!guard.ok) return guard;
+    const post = this.state.posts.find((p) => p.id === postId);
+    if (!post) return { ok: false, error: 'Post not found.' };
+    if (post.authorId !== this.state.session!.id) return { ok: false, error: 'You can only edit your own posts.' };
+    const text = body.trim();
+    if (text.length > LIMITS.postMax) return { ok: false, error: `Posts must be ${LIMITS.postMax} characters or fewer.` };
+    if (!text && !post.imageUrls.length && !post.videoUrl) return { ok: false, error: 'Posts need text, a photo, or a video.' };
+    const hashtags = extractHashtags(text);
+    const editedAt = now();
+    const { error } = await this.sb.from('posts').update({ body: text, hashtags, edited_at: editedAt }).eq('id', postId);
+    if (error) return { ok: false, error: friendlyError(error) };
+    this.commit({ posts: this.state.posts.map((p) => (p.id === postId ? { ...p, body: text, hashtags, editedAt } : p)) });
+    return { ok: true };
+  }
+
+  async deletePost(postId: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const post = this.state.posts.find((p) => p.id === postId);
+    if (!post) return { ok: false, error: 'Post not found.' };
+    const meId = this.state.session!.id;
+    const isAdmin = this.me()?.role === 'admin';
+    if (post.authorId !== meId && !isAdmin) return { ok: false, error: 'Not allowed.' };
+    if (post.authorId === meId) {
+      const deletedAt = now();
+      const { error } = await this.sb.from('posts').update({ deleted_at: deletedAt }).eq('id', postId);
+      if (error) return { ok: false, error: friendlyError(error) };
+      this.commit({ posts: this.state.posts.map((p) => (p.id === postId ? { ...p, deletedAt } : p)) });
+      return { ok: true };
+    }
+    // Admin moderation removes the row outright (RLS delete policy allows admins).
+    const { error } = await this.sb.from('posts').delete().eq('id', postId);
+    if (error) return { ok: false, error: friendlyError(error) };
+    this.commit({
+      posts: this.state.posts.filter((p) => p.id !== postId),
+      comments: this.state.comments.filter((c) => c.postId !== postId),
+    });
+    return { ok: true };
+  }
+
+  /* --- engagement (ENG-1..4) --- */
+  async toggleLike(postId: string): Promise<Result> {
+    const guard = this.requireActive();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    const post = this.state.posts.find((p) => p.id === postId && !p.deletedAt);
+    if (!post) return { ok: false, error: 'Post not found.' };
+    if (isBlockedPair(this.state, meId, post.authorId)) return { ok: false, error: 'You cannot interact with this user.' };
+
+    const liked = this.state.likes.some((l) => l.userId === meId && l.postId === postId);
+    const before = this.state;
+    const likes = liked
+      ? this.state.likes.filter((l) => !(l.userId === meId && l.postId === postId))
+      : [{ userId: meId, postId, createdAt: now() }, ...this.state.likes];
+    const posts = this.state.posts.map((p) =>
+      p.id === postId ? { ...p, likeCount: Math.max(0, p.likeCount + (liked ? -1 : 1)) } : p,
+    );
+    this.commit({ posts, likes }); // optimistic flip (server trigger keeps the count)
+    try {
+      const { error } = liked
+        ? await this.sb.from('likes').delete().eq('user_id', meId).eq('post_id', postId)
+        : await this.sb.from('likes').insert({ user_id: meId, post_id: postId });
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before; // roll back
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async addComment(postId: string, body: string, imageUrls: string[] = []): Promise<Result> {
+    const guard = this.requireActive();
+    if (!guard.ok) return guard;
+    if (!checkLimit('comment', 20, 10 * 60_000)) return { ok: false, error: 'Slow down — commenting limit reached.' };
+    const meId = this.state.session!.id;
+    const post = this.state.posts.find((p) => p.id === postId && !p.deletedAt);
+    if (!post) return { ok: false, error: 'Post not found.' };
+    if (isBlockedPair(this.state, meId, post.authorId)) return { ok: false, error: 'You cannot interact with this user.' };
+    const text = body.trim();
+    if (text.length > LIMITS.commentMax) return { ok: false, error: `Comments must be ${LIMITS.commentMax} characters or fewer.` };
+    if (!text && !imageUrls.length) return { ok: false, error: 'Comments need text or a photo.' };
+    if (imageUrls.length > LIMITS.imagesPerComment) return { ok: false, error: `Up to ${LIMITS.imagesPerComment} photos per comment.` };
+    if (text && this.isDuplicate(meId, text)) return { ok: false, error: 'Looks like you just sent that.' };
+    try {
+      const images = imageUrls.length ? await uploadImages(imageUrls, 'post-images', meId) : [];
+      const { data, error } = await this.sb
+        .from('comments')
+        .insert({ post_id: postId, author_id: meId, body: text, image_urls: images })
+        .select()
+        .single();
+      if (error) return { ok: false, error: friendlyError(error) };
+      this.commit({
+        comments: [mapComment(data as Row), ...this.state.comments],
+        posts: this.state.posts.map((p) => (p.id === postId ? { ...p, commentCount: p.commentCount + 1 } : p)),
+      });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async deleteComment(commentId: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const comment = this.state.comments.find((c) => c.id === commentId);
+    if (!comment) return { ok: false, error: 'Comment not found.' };
+    const meId = this.state.session!.id;
+    const post = this.state.posts.find((p) => p.id === comment.postId);
+    const isPostOwner = post?.authorId === meId;
+    const isAdmin = this.me()?.role === 'admin';
+    if (comment.authorId !== meId && !isPostOwner && !isAdmin) return { ok: false, error: 'Not allowed.' };
+    const { error } = await this.sb.from('comments').delete().eq('id', commentId);
+    if (error) return { ok: false, error: friendlyError(error) };
+    this.commit({
+      comments: this.state.comments.filter((c) => c.id !== commentId),
+      posts: this.state.posts.map((p) =>
+        p.id === comment.postId ? { ...p, commentCount: Math.max(0, p.commentCount - 1) } : p,
+      ),
+    });
+    return { ok: true };
+  }
+
+  /* --- reposts & saves (F-REP, F-SAV) --- */
+  async toggleRepost(postId: string): Promise<Result> {
+    const guard = this.requireActive();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    const post = this.state.posts.find((p) => p.id === postId && !p.deletedAt);
+    if (!post) return { ok: false, error: 'Post not found.' };
+    if (post.authorId === meId) return { ok: false, error: 'You cannot repost your own post.' };
+    if (isBlockedPair(this.state, meId, post.authorId)) return { ok: false, error: 'You cannot interact with this user.' };
+
+    const existing = this.state.reposts.find((r) => r.userId === meId && r.postId === postId);
+    const before = this.state;
+    if (existing) {
+      this.commit({
+        reposts: this.state.reposts.filter((r) => !(r.userId === meId && r.postId === postId)),
+        posts: this.state.posts.map((p) => (p.id === postId ? { ...p, repostCount: Math.max(0, p.repostCount - 1) } : p)),
+      });
+      try {
+        const { error } = await this.sb.from('reposts').delete().eq('user_id', meId).eq('post_id', postId);
+        if (error) throw error;
+        return { ok: true };
+      } catch (e) {
+        this.state = before;
+        this.emit();
+        return { ok: false, error: friendlyError(e) };
+      }
+    }
+    this.commit({
+      reposts: [{ userId: meId, postId, createdAt: now() }, ...this.state.reposts],
+      posts: this.state.posts.map((p) => (p.id === postId ? { ...p, repostCount: p.repostCount + 1 } : p)),
+    });
+    try {
+      const { error } = await this.sb.from('reposts').insert({ user_id: meId, post_id: postId });
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async toggleSave(postId: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    const post = this.state.posts.find((p) => p.id === postId && !p.deletedAt);
+    if (!post) return { ok: false, error: 'Post not found.' };
+    const existing = this.state.saves.find((s) => s.userId === meId && s.postId === postId);
+    const before = this.state;
+    if (existing) {
+      this.commit({ saves: this.state.saves.filter((s) => !(s.userId === meId && s.postId === postId)) });
+      try {
+        const { error } = await this.sb.from('saves').delete().eq('user_id', meId).eq('post_id', postId);
+        if (error) throw error;
+        return { ok: true };
+      } catch (e) {
+        this.state = before;
+        this.emit();
+        return { ok: false, error: friendlyError(e) };
+      }
+    }
+    // Saves are private — no notification (F-SAV).
+    this.commit({ saves: [{ userId: meId, postId, createdAt: now() }, ...this.state.saves] });
+    try {
+      const { error } = await this.sb.from('saves').insert({ user_id: meId, post_id: postId });
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  /* --- social graph (FOL-1..3, MOD-3) --- */
+  async toggleFollow(userId: string): Promise<Result> {
+    const guard = this.requireActive();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    if (meId === userId) return { ok: false, error: 'You cannot follow yourself.' };
+    if (isBlockedPair(this.state, meId, userId)) return { ok: false, error: 'You cannot follow this user.' };
+    const target = profileById(this.state, userId);
+    if (!target?.username) return { ok: false, error: 'Profile not found.' };
+    if (!checkLimit('follow', 30, 10 * 60_000)) return { ok: false, error: 'Slow down — follow limit reached.' };
+
+    const existing = this.state.follows.find((f) => f.followerId === meId && f.followingId === userId);
+    const before = this.state;
+    if (existing) {
+      this.commit({ follows: this.state.follows.filter((f) => !(f.followerId === meId && f.followingId === userId)) });
+      try {
+        const { error } = await this.sb.from('follows').delete().eq('follower_id', meId).eq('following_id', userId);
+        if (error) throw error;
+        return { ok: true };
+      } catch (e) {
+        this.state = before;
+        this.emit();
+        return { ok: false, error: friendlyError(e) };
+      }
+    }
+    this.commit({ follows: [{ followerId: meId, followingId: userId, createdAt: now() }, ...this.state.follows] });
+    try {
+      const { error } = await this.sb.from('follows').insert({ follower_id: meId, following_id: userId });
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async blockUser(userId: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    if (meId === userId) return { ok: false, error: 'You cannot block yourself.' };
+    const severedConvs = this.state.conversations
+      .filter((c) => c.memberIds.length === 2 && c.memberIds.includes(meId) && c.memberIds.includes(userId))
+      .map((c) => c.id);
+    const before = this.state;
+    this.commit({
+      blocks: [...this.state.blocks, { blockerId: meId, blockedId: userId, createdAt: now() }],
+      // Blocking severs follows and hides the shared DM thread (F-SAF); the
+      // other direction is enforced server-side by the RLS visibility policies.
+      follows: this.state.follows.filter(
+        (f) => !((f.followerId === meId && f.followingId === userId) || (f.followerId === userId && f.followingId === meId)),
+      ),
+      conversations: this.state.conversations.filter((c) => !severedConvs.includes(c.id)),
+      messages: this.state.messages.filter((m) => !severedConvs.includes(m.conversationId)),
+    });
+    try {
+      const { error } = await this.sb.from('blocks').insert({ blocker_id: meId, blocked_id: userId });
+      if (error) throw error;
+      await this.sb.from('follows').delete().eq('follower_id', meId).eq('following_id', userId);
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async unblockUser(userId: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    const before = this.state;
+    this.commit({ blocks: this.state.blocks.filter((b) => !(b.blockerId === meId && b.blockedId === userId)) });
+    try {
+      const { error } = await this.sb.from('blocks').delete().eq('blocker_id', meId).eq('blocked_id', userId);
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  /* --- safety (MOD-1..2) --- */
+  async submitReport(
+    targetType: ReportTarget,
+    targetId: string,
+    reason: ReportReason,
+    details: string | null,
+  ): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    try {
+      const { data, error } = await this.sb
+        .from('reports')
+        .insert({
+          reporter_id: this.state.session!.id,
+          target_type: targetType,
+          target_id: targetId,
+          reason,
+          details: details?.slice(0, 500) ?? null,
+        })
+        .select()
+        .single();
+      if (error) return { ok: false, error: friendlyError(error) };
+      this.commit({ reports: [mapReport(data as Row), ...this.state.reports] });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async resolveReport(reportId: string, status: 'dismissed' | 'actioned'): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    if (this.me()?.role !== 'admin') return { ok: false, error: 'Admins only.' };
+    const { error } = await this.sb.from('reports').update({ status }).eq('id', reportId);
+    if (error) return { ok: false, error: friendlyError(error) };
+    this.commit({ reports: this.state.reports.map((r) => (r.id === reportId ? { ...r, status } : r)) });
+    return { ok: true };
+  }
+
+  async setSuspended(userId: string, suspended: boolean): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    if (this.me()?.role !== 'admin') return { ok: false, error: 'Admins only.' };
+    const before = this.state;
+    this.commit({ profiles: this.state.profiles.map((p) => (p.id === userId ? { ...p, isSuspended: suspended } : p)) });
+    try {
+      const { error } = await this.sb.from('profiles').update({ is_suspended: suspended }).eq('id', userId);
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  /* --- stories (F-STO) --- */
+  async createStory(input: StoryInput): Promise<Result> {
+    const guard = this.requireActive();
+    if (!guard.ok) return guard;
+    if (!checkLimit('story', 10, 60 * 60_000)) return { ok: false, error: 'Story limit reached (10 per hour).' };
+    const caption = input.caption.trim().slice(0, LIMITS.storyCaptionMax);
+    if (input.kind === 'text' && !caption) return { ok: false, error: 'Text stories need a caption.' };
+    if (input.kind !== 'text' && !input.media) return { ok: false, error: 'Pick a photo or video first.' };
+    const meId = this.state.session!.id;
+    try {
+      const media =
+        input.kind === 'text' ? null : await uploadRef(input.media!, input.kind === 'video' ? 'media' : 'post-images', meId);
+      const { data, error } = await this.sb
+        .from('stories')
+        .insert({
+          user_id: meId,
+          kind: input.kind,
+          media,
+          caption,
+          expires_at: new Date(Date.now() + LIMITS.storyTtlMs).toISOString(),
+        })
+        .select()
+        .single();
+      if (error) return { ok: false, error: friendlyError(error) };
+      this.commit({ stories: [mapStory(data as Row), ...this.state.stories] });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async deleteStory(storyId: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const story = this.state.stories.find((s) => s.id === storyId);
+    if (!story) return { ok: false, error: 'Story not found.' };
+    if (story.userId !== this.state.session!.id && this.me()?.role !== 'admin') return { ok: false, error: 'Not allowed.' };
+    const { error } = await this.sb.from('stories').delete().eq('id', storyId);
+    if (error) return { ok: false, error: friendlyError(error) };
+    this.commit({ stories: this.state.stories.filter((s) => s.id !== storyId) });
+    return { ok: true };
+  }
+
+  /* --- direct messaging (F-DM) --- */
+  async startConversation(otherId: string): Promise<ConversationResult> {
+    const guard = this.requireActive();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    if (meId === otherId) return { ok: false, error: 'You cannot message yourself.' };
+    if (isBlockedPair(this.state, meId, otherId)) return { ok: false, error: 'You cannot message a blocked user.' };
+    const other = profileById(this.state, otherId);
+    if (!other?.username) return { ok: false, error: 'User not found.' };
+
+    const existing = this.state.conversations.find(
+      (c) => c.memberIds.length === 2 && c.memberIds.includes(meId) && c.memberIds.includes(otherId),
+    );
+    if (existing) return { ok: true, conversationId: existing.id };
+
+    try {
+      const { data: conv, error } = await this.sb.from('conversations').insert({}).select().single();
+      if (error) return { ok: false, error: friendlyError(error) };
+      const cid = rs(conv.id);
+      const first = await this.sb.from('conversation_members').insert({ conversation_id: cid, user_id: meId });
+      if (first.error) return { ok: false, error: friendlyError(first.error) };
+      const second = await this.sb.from('conversation_members').insert({ conversation_id: cid, user_id: otherId });
+      if (second.error) return { ok: false, error: friendlyError(second.error) };
+      const conversation: Conversation = { id: cid, memberIds: [meId, otherId], createdAt: now() };
+      this.commit({ conversations: [conversation, ...this.state.conversations] });
+      return { ok: true, conversationId: cid };
+    } catch (e) {
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async sendMessage(
+    conversationId: string,
+    body: string,
+    media: { kind: MediaKind; ref: string } | null,
+    postId: string | null,
+  ): Promise<Result> {
+    const guard = this.requireActive();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    const conv = this.state.conversations.find((c) => c.id === conversationId);
+    if (!conv || !conv.memberIds.includes(meId)) return { ok: false, error: 'This conversation is not available.' };
+    if (!checkLimit('dm', 20, 10 * 60_000)) return { ok: false, error: 'Slow down — messaging limit reached (20 per 10 min).' };
+
+    const otherId = conv.memberIds.find((m) => m !== meId)!;
+    if (isBlockedPair(this.state, meId, otherId)) return { ok: false, error: 'You cannot message a blocked user.' };
+
+    const text = body.trim().slice(0, LIMITS.dmMax);
+    if (!text && !media && !postId) return { ok: false, error: 'Write a message first.' };
+    if (postId && !this.state.posts.some((p) => p.id === postId && !p.deletedAt)) return { ok: false, error: 'That post is gone.' };
+    if (text && this.isDuplicate(meId, text)) return { ok: false, error: 'Looks like you just sent that.' };
+
+    try {
+      const mediaRef = media ? await uploadRef(media.ref, media.kind === 'video' ? 'media' : 'post-images', meId) : null;
+      const { data, error } = await this.sb
+        .from('messages')
+        .insert({
+          conversation_id: conversationId,
+          sender_id: meId,
+          body: text,
+          media_kind: media?.kind ?? null,
+          media: mediaRef,
+          post_id: postId,
+        })
+        .select()
+        .single();
+      if (error) return { ok: false, error: friendlyError(error) };
+      this.commit({ messages: [...this.state.messages, mapMessage(data as Row)] });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async markConversationRead(conversationId: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    const before = this.state;
+    this.commit({
+      messages: this.state.messages.map((m) =>
+        m.conversationId === conversationId && m.senderId !== meId && !m.readAt ? { ...m, readAt: now() } : m,
+      ),
+    });
+    try {
+      const { error } = await this.sb
+        .from('messages')
+        .update({ read_at: now() })
+        .eq('conversation_id', conversationId)
+        .neq('sender_id', meId)
+        .is('read_at', null);
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  /* --- notifications (NOT-1..2) --- */
+  async markNotificationsRead(): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    const before = this.state;
+    this.commit({
+      notifications: this.state.notifications.map((n) => (n.recipientId === meId && !n.readAt ? { ...n, readAt: now() } : n)),
+    });
+    try {
+      const { error } = await this.sb.from('notifications').update({ read_at: now() }).eq('recipient_id', meId).is('read_at', null);
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  /* --- feeds & search (FEED-1..4) — same selectors, over hydrated rows --- */
+  getFollowingFeed(cursor: string | null, limit = LIMITS.feedPageSize): FeedPage {
+    const me = this.state.session?.id;
+    if (!me) return { items: [], nextCursor: null };
+    return selectFollowingFeed(this.state, me, cursor, limit);
+  }
+  getExploreFeed(cursor: string | null, limit = LIMITS.feedPageSize): FeedPage {
+    return selectExploreFeed(this.state, this.state.session?.id ?? null, cursor, limit);
+  }
+  searchUsers(q: string, limit = 20): Profile[] {
+    return selectSearchUsers(this.state, this.state.session?.id ?? null, q, limit);
+  }
+
+  /** Realtime is live in production — no fabricated activity (F-RT). */
+  simulateIncomingActivity(): string | null {
+    return null;
+  }
+}
+
 /* ----------------------------------------------------------------- react */
 
-export const provider: DataProvider = new DemoProvider();
+/** Offline demo provider; the live Supabase provider when env credentials exist. */
+export const provider: DataProvider = realBackend && supabase ? new SupabaseProvider(supabase) : new DemoProvider();
 
 // Dev hook: lets e2e/debug tooling exercise the data layer directly.
 if (import.meta.env.DEV && typeof window !== 'undefined') {
