@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { X } from 'lucide-react';
-import { createPortal } from 'react-dom';
 import type { ReportReason, ReportTarget } from '../types';
 import { useActions } from '../lib/store';
+import Modal from './Modal';
 import { toast } from './Toast';
 
 const REASONS: Array<{ value: ReportReason; label: string }> = [
@@ -40,12 +40,17 @@ export default function ReportModal({
     onClose();
   }
 
-  return createPortal(
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={`Report ${label}`}>
-      <form onSubmit={submit} className="card w-full max-w-md p-5">
-        <div className="mb-4 flex items-center justify-between">
+  return (
+    <Modal onClose={onClose} label={`Report ${label}`} className="max-w-md" showClose={false}>
+      <form onSubmit={submit} className="p-5">
+        <div className="mb-4 flex items-center justify-between pr-8">
           <h2 className="text-lg font-bold">Report {label}</h2>
-          <button type="button" onClick={onClose} aria-label="Close report dialog" className="rounded-full p-1.5 text-slate-500 hover:bg-white/[0.06]">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close report dialog"
+            className="tap44 absolute right-2 top-2 rounded-full p-1.5 text-slate-500 hover:bg-white/[0.06]"
+          >
             <X size={18} />
           </button>
         </div>
@@ -85,7 +90,6 @@ export default function ReportModal({
           <button type="submit" disabled={sending} className="btn-primary">Submit report</button>
         </div>
       </form>
-    </div>,
-    document.body,
+    </Modal>
   );
 }

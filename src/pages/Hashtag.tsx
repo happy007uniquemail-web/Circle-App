@@ -29,9 +29,12 @@ export default function Hashtag() {
         hasMore={feed.hasMore}
         onLoadMore={feed.loadMore}
         empty={
-          <p className="card p-8 text-center text-sm text-slate-500">
-            No posts with <b className="text-brand-600">#{tag.toLowerCase()}</b> yet — be the first to use it.
-          </p>
+          <div className="card p-8 text-center text-sm text-slate-500">
+            <p>
+              No posts with <b className="text-brand-600">#{tag.toLowerCase()}</b> yet — be the first to use it.
+            </p>
+            <Link to="/home" className="btn-primary mt-3 inline-flex">Create the first post</Link>
+          </div>
         }
       />
     </div>

@@ -17,10 +17,10 @@ export default function Avatar({ src, name, size = 40, className = '' }: Props) 
       height={size}
       loading="lazy"
       onError={(e) => {
-        // Fallback to initials block if the data URL ever fails.
+        // Fallback to initials block if the data URL ever fails (token-sourced).
         const el = e.currentTarget;
-        el.style.background = '#6366f1';
-        el.style.color = '#fff';
+        el.style.background = 'var(--color-brand-500)';
+        el.style.color = 'var(--color-white, #fff)';
         el.alt = initials(name);
       }}
       className={`shrink-0 rounded-full object-cover ring-1 ring-slate-200 ${className}`}

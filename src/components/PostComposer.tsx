@@ -74,7 +74,7 @@ export default function PostComposer() {
               <Film size={15} className="text-brand-600" />
               <span className="min-w-0 flex-1 truncate">{video.name}</span>
               <span className="text-xs text-slate-400">{video.seconds}s</span>
-              <button type="button" aria-label="Remove video" onClick={() => setVideo(null)} className="rounded-full p-1 text-slate-400 hover:bg-slate-200">
+              <button type="button" aria-label="Remove video" onClick={() => setVideo(null)} className="tap44 rounded-full p-1 text-slate-400 hover:bg-slate-200">
                 <X size={14} />
               </button>
             </div>
@@ -98,9 +98,12 @@ export default function PostComposer() {
                 <span className="text-xs tabular-nums text-slate-400">{remaining} left</span>
               )}
               <label
-                className={`cursor-pointer rounded-full p-2 transition ${video ? 'text-slate-300' : 'text-brand-600 hover:bg-brand-50'}`}
+                className={`tap44 cursor-pointer rounded-full p-2 transition ${video ? 'text-slate-300' : 'text-brand-600 hover:bg-brand-50'}`}
                 title={video ? 'Remove the video to add photos' : `Attach a video (≤${LIMITS.videoMaxSeconds}s, ≤${Math.round(LIMITS.videoMaxBytes / 1048576)} MB)`}
               >
+                <span className="sr-only">
+                  {video ? 'Remove the video to add photos' : `Attach a video (≤${LIMITS.videoMaxSeconds}s, ≤${Math.round(LIMITS.videoMaxBytes / 1048576)} MB)`}
+                </span>
                 <Film size={18} />
                 <input
                   type="file"

@@ -78,7 +78,7 @@ export default function ImageUploader({
               type="button"
               aria-label={`Remove image ${i + 1}`}
               onClick={() => onChange(value.filter((_, j) => j !== i))}
-              className="absolute -right-2 -top-2 rounded-full bg-black/50 p-1 text-white shadow backdrop-blur hover:bg-black/70"
+              className="tap44 absolute -right-2 -top-2 rounded-full bg-black/50 p-1 text-white shadow backdrop-blur hover:bg-black/70"
             >
               <X size={12} />
             </button>
@@ -89,7 +89,11 @@ export default function ImageUploader({
             type="button"
             disabled={!!busy}
             onClick={() => inputRef.current?.click()}
-            aria-label={busy ? 'Compressing photo' : 'Add photos'}
+            aria-label={
+              busy
+                ? `Compressing photo ${busy.done + 1}/${busy.total}`
+                : `Add photos — ${value.length}/${max} selected`
+            }
             className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-white/20 text-slate-500 hover:border-brand-500 hover:text-brand-600 disabled:opacity-60"
           >
             {busy ? <Loader2 size={18} className="animate-spin" /> : <ImagePlus size={18} />}

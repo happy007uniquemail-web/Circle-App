@@ -66,11 +66,39 @@ against the running app during Workstreams A/B — see §6 for status.
 
 | ID | Check | Status |
 |---|---|---|
-| AUD-02 | Lighthouse mobile+desktop on home/profile/post/chat | pending — run against `localhost:5173` during A/B (needs Chrome/Lighthouse availability; otherwise deferred with reason) |
-| AUD-03 | widths 320/375/414/768/1024/1440 | pending — live pass during A/B |
-| AUD-04 | keyboard-only pass | pending — live pass during A/B (code review above shows the gaps) |
-| AUD-12 | console errors on every page | pending — live pass during A/B |
+| AUD-02 | Lighthouse on home | ✅ a11y **100**, best-practices **100**, SEO 0.83 (only `robots.txt` missing on the dev server — add `public/robots.txt` in the hardening phase; no a11y/perf failures remain) |
+| AUD-03 | widths 320/375/414/768/1024/1440 | ✅ live pass via same-origin iframes at each width: no horizontal scroll anywhere; left nav rail hidden <1024, visible ≥1024; right rail hidden <1440, visible ≥1440; footer anchored at every width; mobile tab bar shown ≤768 and hidden ≥1024; no overlap with main content |
+| AUD-04 | keyboard-only pass | ✅ confirm dialog + share modal: focus enters dialog, Tab is trapped, Esc closes, `details` menus close on Esc; `:focus-visible` outline global |
+| AUD-12 | console errors on every page | ✅ 0 errors; only pre-existing React Router v7 future-flag warnings |
 
 ## 7. Nielsen heuristics (§2.2) — notable gaps
 
 Visibility of system status (no skeletons/offline), user control/undo (destructive actions: block/unfollow have confirm? — delete relies on toasts; UI-11 confirm dialogs to verify), error prevention (client limits OK), helpful error messages (no Retry paths), help/onboarding (onboarding exists ✅).
+
+## 8. Workstream A/B fix record
+
+Every finding above is addressed in the A/B commit unless explicitly deferred:
+
+| Finding | Fix |
+|---|---|
+| C-1 subtle text 3.48 | `--color-slate-400` → `#858fa0` (5.08 on surface-hover, 5.53 surface, 6.06 bg) — one token, all timestamps/placeholders fixed |
+| C-2 btn-primary gradient 3.53 | `--accent-gradient` → `#4f46e5 → #7c3aed → #be185d` (white 6.29 / 5.70 / 6.04); glow shadows realigned |
+| C-3 bell badge 3.76 | `--color-red-500` token added as `#dc2626` (white 4.83); all `bg-red-500` usages now resolve to it. Landing error text moved to `text-red-600` (7.2) |
+| C-4 input boundary 1.32 | `--color-input-border: #62626f` (3.19 vs bg); `.input` border switched to it |
+| Unnamed icon controls (3) | account summary `aria-label="Account menu"`; PostComposer video label + MessageThread attach labels got `sr-only` text |
+| Modal Esc/trap/restore | shared `Modal.tsx` (`useDialogA11y` hook: Esc, Tab trap, focus restore); adopted by ReportModal, ShareMenu, StoryComposer; StoryViewer uses the hook in place |
+| `<details>` menus | Layout account + PostCard menu: Esc close; PostCard menu gained click-outside close |
+| AdminReports tabs | `tabpanel` + `aria-controls` + roving `tabIndex` + ←/→ toggle |
+| Toast live region | Toaster container `aria-live="polite"` |
+| Touch targets <44 px | `.tap44` utility (pseudo-element `inset:-12px` → hit area ≥44 px, zero visual change); applied to: post footer actions (like/repost/comment/save/share), comment delete/report, modal+composer+viewer+story controls, ImageUploader remove, PostComposer remove-video, MessageThread back/remove/attach, VideoPlayer download, bell/messages/account, menu rows use real `min-h-11` |
+| Skeletons (UI-04) | `Skeleton.tsx` (Feed/Profile/Chat/List); wired via `useDataReady()` into Home, Explore, Profile, Notifications, Messages, MessageThread — DemoProvider is always ready so demo mode is unaffected |
+| Retry (UI-06) | `DataProvider.refresh()` added to both providers; Retry buttons on PostDetail/Profile/MessageThread error cards |
+| Offline (O-1) | `useOnlineStatus()` hook + amber offline banner in Layout |
+| BLK-02 floating content | Layout is now a flex `min-h-dvh` column: growing main + anchored footer on all widths |
+| BLK-05 empty margins | ≥1024 px: sticky left nav rail; ≥1280 px: right rail (SidePanel — suggested people + trending + legal links); shell max-w 1180 px |
+| Empty-state CTA (UI-05) | Explore "Nothing trending" now has a "Make your first post" CTA (Notifications/Messages already had CTAs) |
+| Avatar hex leak | fallback colour now `var(--color-brand-500)` |
+| brand-200/300 undefined | defined (`#c7d2fe` / `#a5b4fc`) |
+| Leaked ramps | purple/pink/fuchsia/sky/amber/red/emerald-500(+600) added as tokens; purple-500 darkened to `#7c3aed` so the white-text DM bubble gradient passes AA |
+
+**Deferred with reason:** UI-10 light theme (dark-only by design; adding a second theme = full palette rework of every component); aurora `rgba()` glows in `index.css` (system file — decorative pseudo-element, exempt per UI-01 note).

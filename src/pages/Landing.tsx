@@ -138,7 +138,7 @@ export default function Landing() {
                   {mode === 'in' ? 'New here? Create an account' : 'Have an account? Sign in'}
                 </button>
                 {notice && (
-                  <p className={`text-xs ${notice.kind === 'error' ? 'text-red-500' : 'text-emerald-600'}`} role="status">
+                  <p className={`text-xs ${notice.kind === 'error' ? 'text-red-600' : 'text-emerald-600'}`} role="status">
                     {notice.text}
                   </p>
                 )}

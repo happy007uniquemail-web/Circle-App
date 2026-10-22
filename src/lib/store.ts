@@ -98,6 +98,10 @@ export interface DataProvider {
   searchUsers(q: string, limit?: number): MaybePromise<Profile[]>;
   /** DEV-only: fabricates an incoming like/comment/follow to exercise realtime UI. */
   simulateIncomingActivity(): string | null;
+  /** True once initial hydration has finished — pages render skeletons until then (UI-04). */
+  ready(): boolean;
+  /** Re-run hydration; the Retry action behind error states (UI-06). */
+  refresh(): MaybePromise<Result>;
 }
 
 const STORAGE_KEY = 'circle.state.v1';
@@ -685,6 +689,10 @@ export class DemoProvider implements DataProvider {
   };
 
   getSnapshot = (): AppState => this.state;
+
+  /** Demo data is synchronous — always ready (UI-04). */
+  ready = (): boolean => true;
+  refresh = (): Result => ({ ok: true });
 
   private me(): Profile | null {
     return currentUserProfile(this.state);
@@ -1419,6 +1427,7 @@ class SupabaseProvider implements DataProvider {
   private uid: string | null = null;
   private refreshTimer: number | null = null;
   private channel: ReturnType<SupabaseClient['channel']> | null = null;
+  private isReady = false;
 
   constructor(private sb: SupabaseClient) {
     void this.bootstrap();
@@ -1450,6 +1459,7 @@ class SupabaseProvider implements DataProvider {
         picture: rs(meta.avatar_url ?? meta.picture),
       },
     };
+    this.isReady = false; // skeletons until this session's data lands (UI-04)
     this.emit(); // signed-in shell renders immediately; data follows
     await this.hydrate();
     this.attachRealtime();
@@ -1515,9 +1525,14 @@ class SupabaseProvider implements DataProvider {
         })),
         messages: messageRows.map(mapMessage).reverse(), // stored oldest → newest (DemoProvider parity)
       };
+      this.isReady = true; // UI-04: first hydration done — skeletons can retire
       this.emit();
     } catch (e) {
       console.error('[circle] hydrate failed:', e);
+      // Still retire the skeletons: empty states + toasts + Retry beat an
+      // infinite skeleton when the network is down (UI-06).
+      this.isReady = true;
+      this.emit();
     }
   }
 
@@ -1550,6 +1565,7 @@ class SupabaseProvider implements DataProvider {
       this.channel = null;
     }
     this.uid = null;
+    this.isReady = false;
   }
 
   /* --- store plumbing (DemoProvider parity) --- */
@@ -1567,6 +1583,14 @@ class SupabaseProvider implements DataProvider {
     };
   };
   getSnapshot = (): AppState => this.state;
+
+  /** UI-04: skeletons render until the first hydration lands. */
+  ready = (): boolean => this.isReady;
+  refresh = async (): Promise<Result> => {
+    if (!this.uid) return { ok: false, error: 'Please sign in first.' };
+    await this.hydrate();
+    return { ok: true };
+  };
 
   private me(): Profile | null {
     return currentUserProfile(this.state);
@@ -2300,6 +2324,12 @@ export function useAppState(): AppState {
 /** Convenience for mutations in components. */
 export function useActions(): DataProvider {
   return provider;
+}
+
+/** True once the provider has hydrated its first snapshot (UI-04 skeletons). */
+export function useDataReady(): boolean {
+  useAppState(); // re-render when hydration flips the provider's ready flag
+  return provider.ready();
 }
 
 /** Reactive like/save/repost flags for the current user. */

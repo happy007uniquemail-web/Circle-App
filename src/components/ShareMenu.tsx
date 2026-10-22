@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Check, Copy, ExternalLink, MessageCircle, Share2, Users, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { createPortal } from 'react-dom';
 import type { Post } from '../types';
 import Avatar from './Avatar';
+import Modal from './Modal';
 import { toast } from './Toast';
 import { conversationsFor, useAppState } from '../lib/store';
 
@@ -43,12 +43,12 @@ export default function ShareMenu({ post, onClose }: { post: Post; onClose: () =
     navigate(`/messages/${conversationId}?share=post:${post.id}`);
   }
 
-  return createPortal(
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Share post">
-      <div className="card w-full max-w-md p-5">
-        <div className="mb-4 flex items-center justify-between">
+  return (
+    <Modal onClose={onClose} label="Share post" className="max-w-md" showClose={false}>
+      <div className="p-5">
+        <div className="mb-4 flex items-center justify-between pr-8">
           <h2 className="text-lg font-bold">Share post</h2>
-          <button onClick={onClose} aria-label="Close share dialog" className="rounded-full p-1.5 text-slate-500 hover:bg-white/[0.06]">
+          <button onClick={onClose} aria-label="Close share dialog" className="tap44 absolute right-2 top-2 rounded-full p-1.5 text-slate-500 hover:bg-white/[0.06]">
             <X size={18} />
           </button>
         </div>
@@ -58,17 +58,17 @@ export default function ShareMenu({ post, onClose }: { post: Post; onClose: () =
         </div>
 
         <div className="mt-4 space-y-1">
-          <button onClick={copyLink} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white/[0.06]">
+          <button onClick={copyLink} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white/[0.06]">
             {copied ? <Check size={16} className="text-emerald-600" /> : <Copy size={16} className="text-slate-500" />}
             {copied ? 'Link copied' : 'Copy link'}
           </button>
 
-          <a href={`/p/${post.id}`} target="_blank" rel="noopener" onClick={onClose} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white/[0.06]">
+          <a href={`/p/${post.id}`} target="_blank" rel="noopener" onClick={onClose} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white/[0.06]">
             <ExternalLink size={16} className="text-slate-500" /> Open post in new tab
           </a>
 
           {typeof navigator !== 'undefined' && 'share' in navigator && (
-            <button onClick={nativeShare} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white/[0.06]">
+            <button onClick={nativeShare} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white/[0.06]">
               <Share2 size={16} className="text-slate-500" /> Share via device…
             </button>
           )}
@@ -103,7 +103,6 @@ export default function ShareMenu({ post, onClose }: { post: Post; onClose: () =
           )}
         </div>
       </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }

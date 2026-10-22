@@ -24,7 +24,7 @@ export default function LikeButton({ postId, count, size = 17 }: { postId: strin
       }}
       aria-pressed={liked}
       aria-label={liked ? 'Unlike this post' : 'Like this post'}
-      className={`group flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-sm transition hover:text-pink-500 ${
+      className={`tap44 group flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-sm transition hover:text-pink-500 ${
         liked ? 'text-pink-500' : 'text-slate-500'
       }`}
     >

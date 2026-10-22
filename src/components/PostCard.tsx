@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Download, Flag, ImageOff, MessageCircle, MoreHorizontal, Pencil, Repeat2, Trash2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { FeedItem, Post } from '../types';
@@ -7,6 +7,7 @@ import { compact, timeAgo } from '../lib/format';
 import { downloadMedia } from '../lib/media';
 import { currentUserProfile, profileById, useActions, useAppState, useHasReposted, useHasSaved } from '../lib/store';
 import Avatar from './Avatar';
+import { confirmAction } from './ConfirmDialog';
 import LikeButton from './LikeButton';
 import ReportModal from './ReportModal';
 import RichText from './RichText';
@@ -46,6 +47,16 @@ const PostCard = ({ item, onChange }: { item: FeedItem; onChange?: () => void })
   const [draft, setDraft] = useState(item.post.body);
   const [reporting, setReporting] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const menuRef = useRef<HTMLDetailsElement>(null);
+  // Close the post menu on outside click or Esc (UI-08).
+  useEffect(() => {
+    function onPointerDown(e: PointerEvent) {
+      const el = menuRef.current;
+      if (el?.open && !el.contains(e.target as Node)) el.removeAttribute('open');
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, []);
 
   const post = item.post;
   const author = profileById(state, post.authorId);
@@ -64,7 +75,12 @@ const PostCard = ({ item, onChange }: { item: FeedItem; onChange?: () => void })
   }
 
   async function remove() {
-    if (!window.confirm('Delete this post? It is soft-deleted and purged after 30 days.')) return;
+    const ok = await confirmAction({
+      title: 'Delete this post?',
+      message: 'It is soft-deleted and purged after 30 days. This cannot be undone.',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
     const result = await actions.deletePost(post.id);
     if (!result.ok) return toast(result.error ?? 'Could not delete post.', 'error');
     onChange?.();
@@ -134,31 +150,37 @@ const PostCard = ({ item, onChange }: { item: FeedItem; onChange?: () => void })
           )}
         </div>
 
-        <details className="relative">
-          <summary aria-label="Post menu" className="cursor-pointer list-none rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 [&::-webkit-details-marker]:hidden">
+        <details
+          ref={menuRef}
+          className="relative"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') menuRef.current?.removeAttribute('open');
+          }}
+        >
+          <summary aria-label="Post menu" className="tap44 cursor-pointer list-none rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 [&::-webkit-details-marker]:hidden">
             <MoreHorizontal size={18} />
           </summary>
           <div className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-xl glass py-1">
-            <button onClick={copyLink} className="flex w-full items-center gap-2 px-3.5 py-2 text-sm hover:bg-white/[0.06]">
+            <button onClick={copyLink} className="flex min-h-11 w-full items-center gap-2 px-3.5 py-2 text-sm hover:bg-white/[0.06]">
               <Download size={14} /> Copy link
             </button>
             {(post.imageUrls.length > 0 || post.videoUrl) && (
-              <button onClick={() => void downloadPostMedia(post)} className="flex w-full items-center gap-2 px-3.5 py-2 text-sm hover:bg-white/[0.06]">
+              <button onClick={() => void downloadPostMedia(post)} className="flex min-h-11 w-full items-center gap-2 px-3.5 py-2 text-sm hover:bg-white/[0.06]">
                 <Download size={14} /> Save media to device
               </button>
             )}
             {isMine && (
-              <button onClick={() => setEditing(true)} className="flex w-full items-center gap-2 px-3.5 py-2 text-sm hover:bg-white/[0.06]">
+              <button onClick={() => setEditing(true)} className="flex min-h-11 w-full items-center gap-2 px-3.5 py-2 text-sm hover:bg-white/[0.06]">
                 <Pencil size={14} /> Edit post
               </button>
             )}
             {(isMine || isAdmin) && (
-              <button onClick={remove} className="flex w-full items-center gap-2 px-3.5 py-2 text-sm text-red-600 hover:bg-red-50">
+              <button onClick={remove} className="flex min-h-11 w-full items-center gap-2 px-3.5 py-2 text-sm text-red-600 hover:bg-red-50">
                 <Trash2 size={14} /> Delete post
               </button>
             )}
             {!isMine && (
-              <button onClick={() => setReporting(true)} className="flex w-full items-center gap-2 px-3.5 py-2 text-sm hover:bg-white/[0.06]">
+              <button onClick={() => setReporting(true)} className="flex min-h-11 w-full items-center gap-2 px-3.5 py-2 text-sm hover:bg-white/[0.06]">
                 <Flag size={14} /> Report post
               </button>
             )}
@@ -212,7 +234,7 @@ const PostCard = ({ item, onChange }: { item: FeedItem; onChange?: () => void })
               }}
               aria-pressed={reposted}
               aria-label={reposted ? 'Undo repost' : 'Repost this post'}
-              className={`group flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-sm transition hover:text-brand-500 ${reposted ? 'text-emerald-600' : 'text-slate-500'}`}
+              className={`tap44 group flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-sm transition hover:text-brand-500 ${reposted ? 'text-emerald-600' : 'text-slate-500'}`}
             >
               <Repeat2 size={17} className={reposted ? '' : 'group-hover:text-brand-500'} />
               <span className="tabular-nums">{compact(post.repostCount)}</span>
@@ -221,7 +243,7 @@ const PostCard = ({ item, onChange }: { item: FeedItem; onChange?: () => void })
 
           <button
             onClick={toPost}
-            className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-sm transition hover:text-sky-400"
+            className="tap44 flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-sm transition hover:text-sky-400"
             aria-label={`View ${post.commentCount} comments`}
           >
             <MessageCircle size={17} />
@@ -240,7 +262,7 @@ const PostCard = ({ item, onChange }: { item: FeedItem; onChange?: () => void })
             aria-pressed={saved}
             aria-label={saved ? 'Remove from saved' : 'Save post'}
             title={saved ? 'Saved' : 'Save'}
-            className={`rounded-full p-2 transition ${saved ? 'text-amber-500' : 'text-slate-400 hover:text-slate-900'}`}
+            className={`tap44 rounded-full p-2 transition ${saved ? 'text-amber-500' : 'text-slate-400 hover:text-slate-900'}`}
           >
             <svg width="17" height="17" viewBox="0 0 24 24" fill={saved ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" aria-hidden>
               <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
@@ -251,7 +273,7 @@ const PostCard = ({ item, onChange }: { item: FeedItem; onChange?: () => void })
             onClick={(e) => { e.stopPropagation(); setSharing(true); }}
             aria-label="Share this post"
             title="Share"
-            className="rounded-full p-2 text-slate-400 transition hover:text-slate-900"
+            className="tap44 rounded-full p-2 text-slate-400 transition hover:text-slate-900"
           >
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
               <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
@@ -260,7 +282,7 @@ const PostCard = ({ item, onChange }: { item: FeedItem; onChange?: () => void })
           </button>
 
           {post.imageUrls.length === 0 && !post.videoUrl && (
-            <span className="ml-1 hidden items-center gap-1 text-xs text-slate-300 sm:flex" aria-hidden>
+            <span className="ml-1 hidden items-center gap-1 text-xs text-slate-400 sm:flex" aria-hidden>
               <ImageOff size={12} /> text only
             </span>
           )}

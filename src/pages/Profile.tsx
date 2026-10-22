@@ -5,6 +5,8 @@ import Avatar from '../components/Avatar';
 import FollowButton from '../components/FollowButton';
 import InfiniteFeed, { useInfiniteFeed } from '../components/InfiniteFeed';
 import ReportModal from '../components/ReportModal';
+import { confirmAction } from '../components/ConfirmDialog';
+import { ProfileSkeleton } from '../components/Skeleton';
 import { toast } from '../components/Toast';
 import {
   currentUserProfile,
@@ -15,6 +17,7 @@ import {
   selectAuthorFeed,
   useActions,
   useAppState,
+  useDataReady,
   visiblePosts,
 } from '../lib/store';
 
@@ -36,13 +39,19 @@ export default function Profile() {
   const feed = useInfiniteFeed((cursor) =>
     profile && me ? selectAuthorFeed(state, me.id, profile.id, cursor) : { items: [], nextCursor: null },
   );
+  const ready = useDataReady();
+
+  if (!ready && !profile) return <ProfileSkeleton />;
 
   if (!profile || !profile.username) {
     return (
       <div className="card p-8 text-center">
         <h1 className="text-lg font-bold">Profile not found</h1>
         <p className="mt-1 text-sm text-slate-600">No user matches “{username}”.</p>
-        <Link to="/explore" className="btn-primary mt-4 inline-flex">Explore people</Link>
+        <div className="mt-4 flex justify-center gap-2">
+          <button onClick={() => void actions.refresh()} className="btn-ghost">Retry</button>
+          <Link to="/explore" className="btn-primary inline-flex">Explore people</Link>
+        </div>
       </div>
     );
   }
@@ -59,7 +68,12 @@ export default function Profile() {
     .filter((p): p is NonNullable<typeof p> => !!p && !!p.username);
 
   async function blockUser() {
-    if (!window.confirm(`Block @${profile!.username}? They won’t see your content and you won’t see theirs.`)) return;
+    const ok = await confirmAction({
+      title: `Block @${profile!.username}?`,
+      message: 'They won’t see your content and you won’t see theirs. You can undo this in Settings.',
+      confirmLabel: 'Block',
+    });
+    if (!ok) return;
     const r = await actions.blockUser(profile!.id);
     if (r.ok) toast(`Blocked @${profile!.username}. Manage blocks in Settings.`, 'success');
     else toast(r.error ?? 'Could not block user.', 'error');
@@ -109,10 +123,10 @@ export default function Profile() {
             )}
             {me && !isMe && (
               <div className="flex justify-center gap-1">
-                <button onClick={() => setReporting(true)} aria-label="Report this user" className="rounded-full p-2 text-slate-400 hover:bg-white/[0.06]">
+                <button onClick={() => setReporting(true)} aria-label="Report this user" className="tap44 rounded-full p-2 text-slate-400 hover:bg-white/[0.06]">
                   <Flag size={15} />
                 </button>
-                <button onClick={blockUser} aria-label="Block this user" className="rounded-full p-2 text-slate-400 hover:bg-red-50 hover:text-red-600">
+                <button onClick={blockUser} aria-label="Block this user" className="tap44 rounded-full p-2 text-slate-400 hover:bg-red-50 hover:text-red-600">
                   <Ban size={15} />
                 </button>
               </div>

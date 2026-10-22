@@ -3,8 +3,9 @@ import { AtSign, Heart, MessageCircle, Repeat2, UserPlus } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AnimatedList } from '../components/AnimatedList';
 import Avatar from '../components/Avatar';
+import { ListSkeleton } from '../components/Skeleton';
 import { timeAgo } from '../lib/format';
-import { profileById, selectNotifications, useActions, useAppState } from '../lib/store';
+import { profileById, selectNotifications, useActions, useAppState, useDataReady } from '../lib/store';
 
 const ICONS = {
   follow: { Icon: UserPlus, cls: 'bg-brand-50 text-brand-600' },
@@ -26,6 +27,7 @@ export default function Notifications() {
   const actions = useActions();
   const navigate = useNavigate();
   const me = state.session?.id;
+  const ready = useDataReady();
 
   // Visiting the page marks everything read (badge clears) — a manual
   // "Mark all as read" button is provided too.
@@ -48,7 +50,9 @@ export default function Notifications() {
         </button>
       </div>
 
-      {items.length === 0 ? (
+      {!ready ? (
+        <ListSkeleton n={4} />
+      ) : items.length === 0 ? (
         <div className="card p-8 text-center">
           <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-brand-50 text-brand-600">
             <AtSign size={22} />

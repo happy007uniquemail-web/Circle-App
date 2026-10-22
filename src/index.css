@@ -13,7 +13,7 @@
   --color-slate-100: #1e1e24;  /* surfaces, hover */
   --color-slate-200: #26262e;  /* borders (spec --border-subtle) */
   --color-slate-300: #3a3a44;  /* stronger borders */
-  --color-slate-400: #64748b;  /* text-subtle */
+  --color-slate-400: #858fa0;  /* text-subtle — AA on bg/surface/hover (AUD-06 C-1) */
   --color-slate-500: #94a3b8;  /* text-muted */
   --color-slate-600: #94a3b8;  /* body-muted */
   --color-slate-700: #cbd5e1;
@@ -26,6 +26,8 @@
      that carries white text (badges, bubbles). */
   --color-brand-50: #1e1b4b;   /* indigo chip background */
   --color-brand-100: #312e81;  /* indigo border/tint */
+  --color-brand-200: #c7d2fe;  /* light borders/spinners (was an undefined step) */
+  --color-brand-300: #a5b4fc;  /* hover borders */
   --color-brand-400: #818cf8;
   --color-brand-500: #6366f1;  /* accent-primary */
   --color-brand-600: #818cf8;  /* links/icons on obsidian */
@@ -36,6 +38,21 @@
   --color-accent-primary: #6366f1;
   --color-accent-pink: #ec4899;
   --color-accent-sky: #38bdf8;
+
+  /* Tailwind ramps that previously leaked in un-tokenised (UI-01), remapped
+     to palette-consistent values. purple-500 is darkened so the white-text
+     DM bubble gradient meets AA (AUD-06); red-500 is darkened for the white
+     badge text (AUD-06 C-3). */
+  --color-purple-500: #7c3aed;
+  --color-pink-500: #ec4899;
+  --color-fuchsia-500: #d946ef;
+  --color-fuchsia-600: #c026d3;
+  --color-sky-400: #38bdf8;
+  --color-amber-500: #f59e0b;
+  --color-red-500: #dc2626;
+  --color-emerald-500: #10b981;
+  /* Form-control boundary: ≥3:1 against bg (WCAG 1.4.11, AUD-06 C-4) */
+  --color-input-border: #62626f;
 
   /* Surface tokens (spec) */
   --color-bg-primary: #0a0a0c;
@@ -75,7 +92,8 @@
   --radius-card: 16px;
   --radius-button: 9999px;
   --backdrop-blur: blur(16px);
-  --accent-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+  /* AA-safe: white button text needs ≥4.5 on every stop (AUD-06 C-2) */
+  --accent-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #be185d 100%);
 }
 
 html {
@@ -149,7 +167,7 @@ body::before {
   }
 
   .input {
-    @apply w-full rounded-xl border border-border-subtle bg-white/[0.04] px-4 py-2.5 text-sm outline-none transition placeholder:text-txt-subtle focus:border-accent-primary/60 focus:bg-white/[0.07] focus:ring-4 focus:ring-accent-primary/15;
+    @apply w-full rounded-xl border border-input-border bg-white/[0.04] px-4 py-2.5 text-sm outline-none transition placeholder:text-txt-subtle focus:border-accent-primary/60 focus:bg-white/[0.07] focus:ring-4 focus:ring-accent-primary/15;
   }
 
   /* Left icon spacing — must win over `.input`'s px-4 (declared after it) */
@@ -161,10 +179,10 @@ body::before {
   .btn-primary {
     @apply relative inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-50;
     background-image: var(--accent-gradient);
-    box-shadow: 0 10px 28px -10px rgba(168, 85, 247, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    box-shadow: 0 10px 28px -10px rgba(124, 58, 237, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.22);
   }
   .btn-primary:hover {
-    box-shadow: 0 12px 32px -10px rgba(236, 72, 153, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    box-shadow: 0 12px 32px -10px rgba(190, 24, 93, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.3);
   }
 
   .btn-ghost {
@@ -184,6 +202,17 @@ body::before {
 }
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* UI-07: expand a small control's hit area to ≥44×44 px without changing
+   its visual size (the pseudo-element is part of the button's hit box). */
+.tap44 {
+  position: relative;
+}
+.tap44::after {
+  content: '';
+  position: absolute;
+  inset: -12px;
 }
 
 /* Story segment auto-advance (F-STO) */

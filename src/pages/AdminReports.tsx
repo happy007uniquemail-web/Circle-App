@@ -94,12 +94,25 @@ export default function AdminReports() {
           {openCount > 0 && (
             <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-red-700">{openCount} open</span>
           )}
-          <div className="flex rounded-full border border-white/10 bg-white/[0.04] p-0.5 backdrop-blur-md" role="tablist" aria-label="Report filter">
+          <div
+            className="flex rounded-full border border-white/10 bg-white/[0.04] p-0.5 backdrop-blur-md"
+            role="tablist"
+            aria-label="Report filter"
+            onKeyDown={(e) => {
+              // Roving tabs (UI-08): ← → toggles between the two filters.
+              if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+              e.preventDefault();
+              setFilter((f) => (f === 'open' ? 'all' : 'open'));
+            }}
+          >
             {(['open', 'all'] as const).map((f) => (
               <button
                 key={f}
+                id={`reports-tab-${f}`}
                 role="tab"
                 aria-selected={filter === f}
+                aria-controls="reports-panel"
+                tabIndex={filter === f ? 0 : -1}
                 onClick={() => setFilter(f)}
                 className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${filter === f ? 'bg-brand-800 text-white' : 'text-slate-500'}`}
               >
@@ -110,7 +123,8 @@ export default function AdminReports() {
         </div>
       </div>
 
-      {reports.length === 0 ? (
+      <div id="reports-panel" role="tabpanel" aria-labelledby={`reports-tab-${filter}`} tabIndex={0} className="focus:outline-none">
+        {reports.length === 0 ? (
         <div className="card p-8 text-center">
           <CheckCircle2 size={28} className="mx-auto text-emerald-500" />
           <h2 className="mt-2 font-semibold">All clear</h2>
@@ -158,8 +172,9 @@ export default function AdminReports() {
               </li>
             );
           })}
-        </ul>
-      )}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

@@ -5,8 +5,9 @@ import { LIMITS } from '../types';
 import { timeAgo } from '../lib/format';
 import { putVideo, validateVideo } from '../lib/media';
 import { compressImage, formatBytes } from '../lib/compress';
-import { profileById, threadMessages, useActions, useAppState } from '../lib/store';
+import { profileById, threadMessages, useActions, useAppState, useDataReady } from '../lib/store';
 import Avatar from '../components/Avatar';
+import { ChatSkeleton } from '../components/Skeleton';
 import RichText from '../components/RichText';
 import { toast } from '../components/Toast';
 import VideoPlayer from '../components/VideoPlayer';
@@ -30,6 +31,7 @@ export default function MessageThread() {
   const isMember = !!conversation && !!me && conversation.memberIds.includes(me);
   const other = conversation && me ? profileById(state, conversation.memberIds.find((m) => m !== me)!) : null;
   const messages = useMemo(() => (id ? threadMessages(state, id) : []), [state, id]);
+  const ready = useDataReady(); // UI-04: skeleton until hydration lands
 
   // Shared post attach via ShareMenu (`?share=post:<id>`)
   const shareParam = params.get('share');
@@ -52,7 +54,10 @@ export default function MessageThread() {
       <div className="card p-8 text-center">
         <h1 className="text-lg font-bold">Conversation unavailable</h1>
         <p className="mt-1 text-sm text-slate-600">You don’t have access to this thread.</p>
-        <Link to="/messages" className="btn-primary mt-4 inline-flex">Back to messages</Link>
+        <div className="mt-4 flex justify-center gap-2">
+          <button onClick={() => void actions.refresh()} className="btn-ghost">Retry</button>
+          <Link to="/messages" className="btn-primary inline-flex">Back to messages</Link>
+        </div>
       </div>
     );
   }
@@ -100,7 +105,7 @@ export default function MessageThread() {
   return (
     <div className="space-y-3">
       <header className="flex items-center gap-3">
-        <button onClick={() => navigate('/messages')} aria-label="Back to messages" className="rounded-full p-2 text-slate-500 hover:bg-white/[0.06]">
+        <button onClick={() => navigate('/messages')} aria-label="Back to messages" className="tap44 rounded-full p-2 text-slate-500 hover:bg-white/[0.06]">
           <ArrowLeft size={18} />
         </button>
         <Link to={`/u/${other.username}`} className="flex min-w-0 items-center gap-2.5">
@@ -120,7 +125,9 @@ export default function MessageThread() {
       </header>
 
       <ul className="min-h-[45vh] space-y-2.5 rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-md" aria-label="Message thread">
-        {messages.map((m) => {
+        {!ready ? (
+          <ChatSkeleton />
+        ) : messages.map((m) => {
           const mine = m.senderId === me;
           const sender = profileById(state, m.senderId);
           const shared = m.postId ? state.posts.find((p) => p.id === m.postId && !p.deletedAt) : null;
@@ -160,7 +167,7 @@ export default function MessageThread() {
             </li>
           );
         })}
-        {messages.length === 0 && (
+        {ready && messages.length === 0 && (
           <li className="py-8 text-center text-sm text-slate-400">
             This thread is quiet — say hi to {other.displayName.split(' ')[0]} 👋
           </li>
@@ -185,7 +192,7 @@ export default function MessageThread() {
           <button
             onClick={() => { setPhoto(null); setVideo(null); if (sharedPostId) clearShare(); }}
             aria-label="Remove attachment"
-            className="rounded-full p-1.5 text-slate-400 hover:bg-white/[0.06]"
+            className="tap44 rounded-full p-1.5 text-slate-400 hover:bg-white/[0.06]"
           >
             <X size={16} />
           </button>
@@ -194,12 +201,14 @@ export default function MessageThread() {
 
       <form onSubmit={send} className="flex items-end gap-2 rounded-2xl border border-white/10 bg-surface-deep p-3">
         <div className="flex rounded-full border border-slate-200 bg-slate-50 p-1">
-          <label className="cursor-pointer rounded-full p-2 text-brand-600 hover:bg-brand-50" title="Attach photo">
-            <ImagePlus size={18} />
+          <label className="tap44 cursor-pointer rounded-full p-2 text-brand-600 hover:bg-brand-50" title="Attach photo">
+            <span className="sr-only">Attach photo</span>
+            <ImagePlus size={18} aria-hidden />
             <input type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => { void attachPhoto(e.target.files?.[0]); e.target.value = ''; }} />
           </label>
-          <label className="cursor-pointer rounded-full p-2 text-brand-600 hover:bg-brand-50" title="Attach video (≤60s)">
-            <span className="text-sm">🎬</span>
+          <label className="tap44 cursor-pointer rounded-full p-2 text-brand-600 hover:bg-brand-50" title="Attach video (≤60s)">
+            <span className="sr-only">Attach video (up to 60 seconds)</span>
+            <span className="text-sm" aria-hidden>🎬</span>
             <input type="file" accept="video/mp4,video/webm,video/quicktime" hidden onChange={(e) => { void attachVideo(e.target.files?.[0]); e.target.value = ''; }} />
           </label>
         </div>

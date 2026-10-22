@@ -57,7 +57,7 @@ export default function VideoPlayer({ refKey, className = '', poster = true, dow
         <button
           type="button"
           onClick={() => void downloadMedia(refKey, 'circle-video.mp4')}
-          className="absolute right-2 top-2 rounded-full bg-black/60 p-2 text-white transition hover:bg-black/80"
+          className="tap44 absolute right-2 top-2 rounded-full bg-black/60 p-2 text-white transition hover:bg-black/80"
           aria-label="Download video"
         >
           <Download size={15} />

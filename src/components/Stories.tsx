@@ -9,6 +9,7 @@ import { putVideo, validateVideo } from '../lib/media';
 import { compressImage, formatBytes } from '../lib/compress';
 import { activeStories, currentUserProfile, useActions, useAppState } from '../lib/store';
 import Avatar from './Avatar';
+import Modal, { useDialogA11y } from './Modal';
 import { toast } from './Toast';
 import VideoPlayer from './VideoPlayer';
 
@@ -30,6 +31,9 @@ export function StoryViewer({
   const [groupIdx, setGroupIdx] = useState(startIndex);
   const [segIdx, setSegIdx] = useState(segmentIndex);
   const [paused, setPaused] = useState(false);
+  // UI-08: trap Tab inside the viewer and restore focus on close.
+  const viewerRef = useRef<HTMLDivElement>(null);
+  useDialogA11y(viewerRef, onClose);
 
   const groups = useMemo(() => activeStories(state, state.session?.id ?? null), [state]);
   const group = groups[groupIdx];
@@ -82,7 +86,7 @@ export function StoryViewer({
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      <div className="relative w-full max-w-md">
+      <div ref={viewerRef} tabIndex={-1} className="relative w-full max-w-md focus:outline-none">
         {/* progress bars — one per segment of this author */}
         <div className="absolute -top-3 left-0 right-0 flex gap-1 px-1">
           {group.stories.map((s, i) => (
@@ -110,13 +114,13 @@ export function StoryViewer({
                   onClose();
                 } else toast(r.error ?? 'Could not delete story.', 'error');
               }}
-              className="ml-auto rounded-full p-1.5 text-white/70 hover:bg-white/10"
+              className="tap44 ml-auto rounded-full p-1.5 text-white/70 hover:bg-white/10"
               aria-label="Delete my story"
             >
               <X size={17} />
             </button>
           )}
-          {!isMine && <button onClick={onClose} className="ml-auto rounded-full p-1.5 text-white/70 hover:bg-white/10" aria-label="Close stories"><X size={18} /></button>}
+          {!isMine && <button onClick={onClose} className="tap44 ml-auto rounded-full p-1.5 text-white/70 hover:bg-white/10" aria-label="Close stories"><X size={18} /></button>}
         </header>
 
         <div className="relative" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
@@ -140,8 +144,8 @@ export function StoryViewer({
           {/* tap zones */}
           <button className="absolute inset-y-0 left-0 w-1/3 cursor-w-resize" aria-label="Previous story" onClick={() => advance(-1)} />
           <button className="absolute inset-y-0 right-0 w-1/3 cursor-e-resize" aria-label="Next story" onClick={() => advance(1)} />
-          <button className="absolute left-1 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-1 text-white" aria-label="Previous" onClick={() => advance(-1)}><ChevronLeft size={20} /></button>
-          <button className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-1 text-white" aria-label="Next" onClick={() => advance(1)}><ChevronRight size={20} /></button>
+          <button className="tap44 absolute left-1 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-1 text-white" aria-label="Previous" onClick={() => advance(-1)}><ChevronLeft size={20} /></button>
+          <button className="tap44 absolute right-1 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-1 text-white" aria-label="Next" onClick={() => advance(1)}><ChevronRight size={20} /></button>
         </div>
 
         <div className="mt-3 flex justify-between text-xs text-white/60">
@@ -205,12 +209,12 @@ export function StoryComposer({ onClose }: { onClose: () => void }) {
     onClose();
   }
 
-  return createPortal(
-    <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/60 p-4 backdrop-blur-2xl" role="dialog" aria-modal="true" aria-label="Add story">
-      <div className="card w-full max-w-sm p-5">
-        <div className="mb-4 flex items-center justify-between">
+  return (
+    <Modal onClose={onClose} label="Add story" className="max-w-sm" showClose={false}>
+      <div className="p-5">
+        <div className="mb-4 flex items-center justify-between pr-8">
           <h2 className="flex items-center gap-2 text-lg font-bold"><Timer size={17} className="text-brand-600" /> Add story</h2>
-          <button onClick={onClose} aria-label="Close" className="rounded-full p-1.5 text-slate-500 hover:bg-white/[0.06]"><X size={18} /></button>
+          <button onClick={onClose} aria-label="Close" className="tap44 absolute right-2 top-2 rounded-full p-1.5 text-slate-500 hover:bg-white/[0.06]"><X size={18} /></button>
         </div>
         <p className="text-xs text-slate-400">Disappears for everyone after 24 hours.</p>
 
@@ -252,7 +256,7 @@ export function StoryComposer({ onClose }: { onClose: () => void }) {
                 ) : (
                   <VideoPlayer refKey={media} label="Story video preview" className="max-h-64" />
                 )}
-                <button onClick={() => setMedia(null)} aria-label="Remove media" className="absolute right-2 top-2 rounded-full bg-black/60 p-1.5 text-white"><X size={14} /></button>
+                <button onClick={() => setMedia(null)} aria-label="Remove media" className="tap44 absolute right-2 top-2 rounded-full bg-black/60 p-1.5 text-white"><X size={14} /></button>
               </div>
             ) : (
               <button
@@ -282,8 +286,7 @@ export function StoryComposer({ onClose }: { onClose: () => void }) {
           {busy ? 'Working…' : 'Share to story'}
         </button>
       </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }
 

@@ -4,8 +4,9 @@ import { Link, useSearchParams } from 'react-router-dom';
 import InfiniteFeed, { useInfiniteFeed } from '../components/InfiniteFeed';
 import Avatar from '../components/Avatar';
 import FollowButton from '../components/FollowButton';
+import { FeedSkeleton } from '../components/Skeleton';
 import { compact } from '../lib/format';
-import { followerCount, followingCount, selectExploreFeed, selectSearchUsers, trendingHashtags, useAppState } from '../lib/store';
+import { followerCount, followingCount, selectExploreFeed, selectSearchUsers, trendingHashtags, useAppState, useDataReady } from '../lib/store';
 
 /** Trending hashtags over the last 7 days (F-HAS). */
 function TrendingHashtags() {
@@ -41,6 +42,7 @@ export default function Explore() {
   const q = params.get('q') ?? '';
   const [draft, setDraft] = useState(q);
   const feed = useInfiniteFeed((cursor) => selectExploreFeed(state, state.session?.id ?? null, cursor));
+  const ready = useDataReady();
 
   useEffect(() => setDraft(q), [q]);
 
@@ -105,8 +107,17 @@ export default function Explore() {
           </h2>
           <span className="text-xs text-slate-400">engagement score · last 7 days</span>
         </div>
-        <InfiniteFeed items={feed.items} hasMore={feed.hasMore} onLoadMore={feed.loadMore}
-          empty={<p className="card p-6 text-center text-sm text-slate-500">Nothing trending yet.</p>} />
+        {ready ? (
+          <InfiniteFeed items={feed.items} hasMore={feed.hasMore} onLoadMore={feed.loadMore}
+            empty={
+              <div className="card p-6 text-center text-sm text-slate-500">
+                <p>Nothing trending yet.</p>
+                <Link to="/home" className="btn-primary mt-3 inline-flex">Make your first post</Link>
+              </div>
+            } />
+        ) : (
+          <FeedSkeleton n={2} />
+        )}
       </section>
     </div>
   );

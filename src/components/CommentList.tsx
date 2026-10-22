@@ -114,13 +114,13 @@ export default function CommentList({ post }: { post: Post }) {
                         if (!r.ok) toast(r.error ?? 'Could not delete comment.', 'error');
                         else toast('Comment deleted.', 'success');
                       }}
-                      className="rounded-full p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                      className="tap44 rounded-full p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
                     >
                       <Trash2 size={15} />
                     </button>
                   )}
                   {c.authorId !== me.id && (
-                    <button aria-label="Report comment" onClick={() => setReporting(c.id)} className="rounded-full p-1.5 text-slate-400 hover:bg-white/[0.06]">
+                    <button aria-label="Report comment" onClick={() => setReporting(c.id)} className="tap44 rounded-full p-1.5 text-slate-400 hover:bg-white/[0.06]">
                       <Flag size={15} />
                     </button>
                   )}

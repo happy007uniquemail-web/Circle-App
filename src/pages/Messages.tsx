@@ -1,8 +1,9 @@
 import { MessageCircle, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { timeAgo } from '../lib/format';
-import { conversationsFor, useAppState } from '../lib/store';
+import { conversationsFor, useAppState, useDataReady } from '../lib/store';
 import Avatar from '../components/Avatar';
+import { ListSkeleton } from '../components/Skeleton';
 
 function preview(text: string): string {
   return text.length > 70 ? `${text.slice(0, 70)}…` : text;
@@ -12,6 +13,7 @@ function preview(text: string): string {
 export default function Messages() {
   const state = useAppState();
   const me = state.session?.id;
+  const ready = useDataReady();
   if (!me) return null;
   const rows = conversationsFor(state, me);
 
@@ -24,7 +26,9 @@ export default function Messages() {
         </Link>
       </div>
 
-      {rows.length === 0 ? (
+      {!ready ? (
+        <ListSkeleton n={4} />
+      ) : rows.length === 0 ? (
         <div className="card p-8 text-center">
           <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-brand-50 text-brand-600">
             <MessageCircle size={22} />

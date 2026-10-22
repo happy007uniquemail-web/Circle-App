@@ -4,8 +4,9 @@ import InfiniteFeed, { useInfiniteFeed } from '../components/InfiniteFeed';
 import PostComposer from '../components/PostComposer';
 import Avatar from '../components/Avatar';
 import FollowButton from '../components/FollowButton';
+import { FeedSkeleton } from '../components/Skeleton';
 import StoryBar from '../components/Stories';
-import { currentUserProfile, isFollowing, selectFollowingFeed, useAppState } from '../lib/store';
+import { currentUserProfile, isFollowing, selectFollowingFeed, useAppState, useDataReady } from '../lib/store';
 
 /** Suggested accounts — mitigates the "empty feed for new users" risk (PRD §11). */
 function SuggestedFollows({ exclude }: { exclude: string }) {
@@ -43,6 +44,7 @@ function SuggestedFollows({ exclude }: { exclude: string }) {
 export default function Home() {
   const state = useAppState();
   const me = currentUserProfile(state);
+  const ready = useDataReady();
   const feed = useInfiniteFeed((cursor) => (me ? selectFollowingFeed(state, me.id, cursor) : { items: [], nextCursor: null }));
 
   return (
@@ -53,12 +55,16 @@ export default function Home() {
       </div>
       <StoryBar />
       <PostComposer />
-      <InfiniteFeed
-        items={feed.items}
-        hasMore={feed.hasMore}
-        onLoadMore={feed.loadMore}
-        empty={me ? <SuggestedFollows exclude={me.id} /> : null}
-      />
+      {ready ? (
+        <InfiniteFeed
+          items={feed.items}
+          hasMore={feed.hasMore}
+          onLoadMore={feed.loadMore}
+          empty={me ? <SuggestedFollows exclude={me.id} /> : null}
+        />
+      ) : (
+        <FeedSkeleton n={3} />
+      )}
     </div>
   );
 }
