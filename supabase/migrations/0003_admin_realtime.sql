@@ -20,6 +20,7 @@ create policy "profiles_update_admin" on profiles
 -- =========================================================================
 
 drop policy if exists "posts_select_not_deleted" on posts;
+drop policy if exists "posts_select_visible_or_admin" on posts;
 create policy "posts_select_visible_or_admin" on posts
   for select to authenticated
   using (

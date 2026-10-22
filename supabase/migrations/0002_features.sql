@@ -58,8 +58,9 @@ create table if not exists reposts (
   user_id uuid not null references profiles(id) on delete cascade,
   post_id uuid not null references posts(id) on delete cascade,
   created_at timestamptz not null default now(),
-  primary key (user_id, post_id),
-  check (user_id <> (select author_id from posts where id = post_id))  -- no self-repost
+  primary key (user_id, post_id)
+  -- no self-repost is enforced by the RLS insert policy below: PostgreSQL
+  -- forbids subqueries inside CHECK constraints (0A000)
 );
 create index if not exists reposts_post_idx on reposts (post_id, created_at desc);
 
@@ -103,7 +104,10 @@ create trigger notifications_on_repost after insert on reposts
 alter table reposts enable row level security;
 create policy "reposts_select" on reposts for select to authenticated using (true);
 create policy "reposts_insert_own" on reposts for insert to authenticated
-  with check (user_id = auth.uid());
+  with check (
+    user_id = auth.uid()
+    and user_id <> (select author_id from posts where id = post_id)  -- no self-repost
+  );
 create policy "reposts_delete_own" on reposts for delete to authenticated
   using (user_id = auth.uid());
 
@@ -142,8 +146,9 @@ create table if not exists stories (
   expires_at timestamptz not null,
   check ((kind = 'text') = (media is null))
 );
-create index if not exists stories_live_idx on stories (user_id, created_at desc)
-  where expires_at > now();
+-- Partial predicates require IMMUTABLE expressions, and now() is only STABLE —
+-- the live/expiry filter is applied by the stories RLS policy instead.
+create index if not exists stories_live_idx on stories (user_id, created_at desc);
 
 alter table stories enable row level security;
 create policy "stories_select_live"
@@ -281,13 +286,14 @@ as $$
     union select auth.uid()
   ),
   base as (
-    select p.* as post_row, null::uuid as reposter, null::timestamptz as reposted, p.created_at as ts
+    select to_jsonb(p) as post_row, p.id as post_id,
+           null::uuid as reposter, null::timestamptz as reposted, p.created_at as ts
     from posts p
     where p.deleted_at is null and p.author_id in (select uid from following)
       and p.author_id <> all (select uid from blocked)
       and not exists (select 1 from profiles pr where pr.id = p.author_id and pr.is_suspended)
     union all
-    select p.*, r.user_id, r.created_at, r.created_at
+    select to_jsonb(p), p.id, r.user_id, r.created_at, r.created_at
     from reposts r
     join posts p on p.id = r.post_id
     where r.user_id in (select uid from following)
@@ -296,13 +302,13 @@ as $$
       and not exists (select 1 from profiles pr where pr.id = p.author_id and pr.is_suspended)
   ),
   dedup as (  -- one entry per post: later event (repost vs original) wins
-    select distinct on (post_row.id) * from base
-    order by post_row.id, ts desc
+    select distinct on (post_id) * from base
+    order by post_id, ts desc
   )
-  select to_jsonb(d.post_row) as post, d.reposter, d.reposted
+  select d.post_row, d.reposter, d.reposted
   from dedup d
-  where (cursor_ts is null or d.ts < cursor_ts or (d.ts = cursor_ts and d.post_row.id < cursor_id))
-  order by d.ts desc, d.post_row.id desc
+  where (cursor_ts is null or d.ts < cursor_ts or (d.ts = cursor_ts and d.post_id < cursor_id))
+  order by d.ts desc, d.post_id desc
   limit least(page_limit, 50);
 $$;
 
@@ -314,16 +320,16 @@ create or replace function public.get_trending_hashtags(top_n int default 10)
 returns table (tag text, count bigint)
 language sql stable security invoker set search_path = public
 as $$
-  select t as tag, count(*) as count
-  from posts p, unnest(p.hashtags) as t
+  select h.tag, count(*)
+  from posts p, unnest(p.hashtags) as h(tag)
   where p.deleted_at is null
     and p.created_at > now() - interval '7 days'
     and p.author_id <> all (
       select case when b.blocker_id = auth.uid() then b.blocked_id else b.blocker_id end
       from blocks b where b.blocker_id = auth.uid() or b.blocked_id = auth.uid()
     )
-  group by t
-  order by count desc, t asc
+  group by h.tag
+  order by count(*) desc, h.tag asc
   limit least(top_n, 25);
 $$;
 
@@ -355,8 +361,8 @@ create policy "media_owner_delete"
 --   channel('rt:conv:<id>').on('postgres_changes', {event:'*', table:'messages', filter:`conversation_id=eq.${id}`})
 -- =========================================================================
 
-alter publication supabase_realtime add table notifications;
-alter publication supabase_realtime add table messages;
-alter publication supabase_realtime add table likes;
-alter publication supabase_realtime add table reposts;
-alter publication supabase_realtime add table follows;
+alter publication supabase_realtime add table if not exists notifications;
+alter publication supabase_realtime add table if not exists messages;
+alter publication supabase_realtime add table if not exists likes;
+alter publication supabase_realtime add table if not exists reposts;
+alter publication supabase_realtime add table if not exists follows;
