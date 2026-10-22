@@ -1,0 +1,196 @@
+@import 'tailwindcss';
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Circle design system — Obsidian dark palette with glass layers and
+   vibrant brand gradients (spec §2 "globals.css").
+   ═══════════════════════════════════════════════════════════════════════ */
+@theme {
+  /* ── Obsidian neutrals ────────────────────────────────────────────────
+     The slate ramp is remapped to the dark palette so every semantic
+     utility in the app (text-slate-500, border-slate-200, bg-slate-50…)
+     resolves to the obsidian scale automatically.                       */
+  --color-slate-50: #16161a;   /* surfaces */
+  --color-slate-100: #1e1e24;  /* surfaces, hover */
+  --color-slate-200: #26262e;  /* borders (spec --border-subtle) */
+  --color-slate-300: #3a3a44;  /* stronger borders */
+  --color-slate-400: #64748b;  /* text-subtle */
+  --color-slate-500: #94a3b8;  /* text-muted */
+  --color-slate-600: #94a3b8;  /* body-muted */
+  --color-slate-700: #cbd5e1;
+  --color-slate-800: #e2e8f0;
+  --color-slate-900: #f8fafc;  /* text-main */
+  --color-slate-950: #0a0a0c;  /* bg-primary */
+
+  /* Brand ramp oriented for dark surfaces: tints are deep, "600/700" are
+     light enough to be read as text on obsidian; 800 is the solid fill
+     that carries white text (badges, bubbles). */
+  --color-brand-50: #1e1b4b;   /* indigo chip background */
+  --color-brand-100: #312e81;  /* indigo border/tint */
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;  /* accent-primary */
+  --color-brand-600: #818cf8;  /* links/icons on obsidian */
+  --color-brand-700: #c4b5fd;  /* text on brand-50 chips */
+  --color-brand-800: #4338ca;  /* solid fill behind white text */
+
+  /* Accent tokens (spec) */
+  --color-accent-primary: #6366f1;
+  --color-accent-pink: #ec4899;
+  --color-accent-sky: #38bdf8;
+
+  /* Surface tokens (spec) */
+  --color-bg-primary: #0a0a0c;
+  --color-surface: #16161a;
+  --color-surface-hover: #1e1e24;
+  --color-surface-deep: #101014; /* recessed bars: composer strip, wells */
+  --color-glass: rgba(22, 22, 26, 0.85);
+  --color-border-subtle: #26262e;
+  --color-border-active: #6366f1;
+
+  /* Typography tokens (spec) */
+  --color-txt-main: #f8fafc;
+  --color-txt-muted: #94a3b8;
+  --color-txt-subtle: #64748b;
+
+  /* Tinted status ramps — dark panel + light ink pairs */
+  --color-red-50: #2a1620;
+  --color-red-200: #7f1d1d;
+  --color-red-600: #f87171;
+  --color-red-700: #fca5a5;
+  --color-red-800: #fecaca;
+  --color-emerald-50: #0b2420;
+  --color-emerald-200: #14532d;
+  --color-emerald-600: #34d399;
+  --color-emerald-700: #6ee7b7;
+  --color-emerald-800: #a7f3d0;
+  --color-teal-50: #0c2a2b;
+  --color-teal-600: #2dd4bf;
+  --color-amber-50: #2b2210;
+  --color-amber-700: #fcd34d;
+  --color-rose-50: #2c1620;
+  --color-rose-600: #fb7185;
+}
+
+/* Spec layout tokens */
+:root {
+  --radius-card: 16px;
+  --radius-button: 9999px;
+  --backdrop-blur: blur(16px);
+  --accent-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+}
+
+html {
+  scroll-behavior: smooth;
+  background-color: #0a0a0c;
+}
+
+body {
+  @apply text-slate-900 antialiased;
+  font-family: 'Inter', 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background-color: #0a0a0c;
+  overflow-x: hidden;
+}
+
+/* ── Ambient brand glow: fixed, slowly drifting color fields ──────────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: -25%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(40% 40% at 15% 2%, rgba(99, 102, 241, 0.16), transparent 70%),
+    radial-gradient(35% 35% at 86% 6%, rgba(168, 85, 247, 0.13), transparent 70%),
+    radial-gradient(45% 45% at 92% 92%, rgba(236, 72, 153, 0.10), transparent 70%),
+    radial-gradient(40% 40% at 4% 96%, rgba(56, 189, 248, 0.08), transparent 70%);
+  animation: aurora 48s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes aurora {
+  from { transform: rotate(0deg) scale(1); }
+  to { transform: rotate(5deg) scale(1.08); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+}
+
+/* Spec: custom slim scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-subtle);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-txt-subtle);
+}
+
+/* WCAG: visible focus for keyboard navigation (§8 Accessibility) */
+:focus-visible {
+  outline: 2px solid var(--color-border-active);
+  outline-offset: 2px;
+}
+
+/* Component layer so per-element utilities (tints, sizes) can override */
+@layer components {
+  /* Frosted surface — the default card.
+     NOTE: no backdrop-filter here on purpose — a card-level backdrop-filter
+     would become the containing block for `fixed` overlays rendered inside
+     cards (share sheet, report modal, story viewer), pinning them to the
+     card instead of the viewport. */
+  .card {
+    @apply rounded-2xl border border-border-subtle bg-surface/95 shadow-lg shadow-black/40;
+  }
+
+  .input {
+    @apply w-full rounded-xl border border-border-subtle bg-white/[0.04] px-4 py-2.5 text-sm outline-none transition placeholder:text-txt-subtle focus:border-accent-primary/60 focus:bg-white/[0.07] focus:ring-4 focus:ring-accent-primary/15;
+  }
+
+  /* Left icon spacing — must win over `.input`'s px-4 (declared after it) */
+  .input-icon {
+    padding-left: 2.25rem;
+  }
+
+  /* Primary CTA — brand gradient pill with glow */
+  .btn-primary {
+    @apply relative inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-50;
+    background-image: var(--accent-gradient);
+    box-shadow: 0 10px 28px -10px rgba(168, 85, 247, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  }
+  .btn-primary:hover {
+    box-shadow: 0 12px 32px -10px rgba(236, 72, 153, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-txt-muted transition hover:bg-white/[0.06] hover:text-txt-main disabled:opacity-50;
+  }
+
+  /* Floating glass — dropdowns, popovers, toasts, top navigation */
+  .glass {
+    @apply border border-white/10 bg-glass shadow-xl shadow-black/50 backdrop-blur-2xl;
+  }
+}
+
+/* Horizontal trays (story bar) scroll without a visible scrollbar */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Story segment auto-advance (F-STO) */
+@keyframes storygrow {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+.story-progress {
+  animation: storygrow 5s linear forwards;
+}

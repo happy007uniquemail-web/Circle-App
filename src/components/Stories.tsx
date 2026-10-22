@@ -1,0 +1,356 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, Plus, Timer, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { createPortal } from 'react-dom';
+import type { Story } from '../types';
+import { LIMITS } from '../types';
+import { timeAgo } from '../lib/format';
+import { putVideo, validateVideo } from '../lib/media';
+import { activeStories, currentUserProfile, useActions, useAppState } from '../lib/store';
+import Avatar from './Avatar';
+import { toast } from './Toast';
+import VideoPlayer from './VideoPlayer';
+
+/* -------------------------------------------------------------- viewer */
+
+/** Full-screen tap-through story viewer with progress bars + autoplay (F-STO). */
+export function StoryViewer({
+  startIndex,
+  segmentIndex = 0,
+  onClose,
+}: {
+  startIndex: number;
+  segmentIndex?: number;
+  onClose: () => void;
+}) {
+  const state = useAppState();
+  const actions = useActions();
+  const me = currentUserProfile(state);
+  const [groupIdx, setGroupIdx] = useState(startIndex);
+  const [segIdx, setSegIdx] = useState(segmentIndex);
+  const [paused, setPaused] = useState(false);
+
+  const groups = useMemo(() => activeStories(state, state.session?.id ?? null), [state]);
+  const group = groups[groupIdx];
+  const story: Story | undefined = group?.stories[segIdx];
+
+  // Auto-advance every 5 s (video stories advance when playback ends via key).
+  useEffect(() => {
+    if (!story || paused) return;
+    const t = window.setTimeout(() => advance(1), 5000);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [story?.id, paused]);
+
+  function advance(dir: 1 | -1) {
+    if (!group) return onClose();
+    const nextSeg = segIdx + dir;
+    if (nextSeg >= 0 && nextSeg < group.stories.length) return setSegIdx(nextSeg);
+    const nextGroup = groupIdx + dir;
+    if (nextGroup >= 0 && nextGroup < groups.length) {
+      setGroupIdx(nextGroup);
+      setSegIdx(dir === 1 ? 0 : groups[nextGroup]!.stories.length - 1);
+      return;
+    }
+    onClose();
+  }
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowRight') advance(1);
+      if (e.key === 'ArrowLeft') advance(-1);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupIdx, segIdx, groups.length]);
+
+  if (!group || !story) return null;
+  const isMine = story.userId === me?.id;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-2xl"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${group.profile.displayName}'s story`}
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+      onTouchStart={() => setPaused(true)}
+      onTouchEnd={() => setPaused(false)}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+    >
+      <div className="relative w-full max-w-md">
+        {/* progress bars — one per segment of this author */}
+        <div className="absolute -top-3 left-0 right-0 flex gap-1 px-1">
+          {group.stories.map((s, i) => (
+            <span key={s.id} className="h-1 flex-1 overflow-hidden rounded-full bg-white/30">
+              <span
+                className={`block h-full rounded-full bg-white ${i === segIdx && !paused ? 'story-progress' : ''}`}
+                style={{ width: i < segIdx ? '100%' : i === segIdx ? (paused ? '40%' : undefined) : '0%' }}
+              />
+            </span>
+          ))}
+        </div>
+
+        <header className="mb-3 flex items-center gap-2 pt-3 text-white">
+          <Avatar src={group.profile.avatarUrl} name={group.profile.displayName} size={34} />
+          <Link to={`/u/${group.profile.username}`} onClick={onClose} className="text-sm font-semibold hover:underline">
+            {group.profile.displayName}
+          </Link>
+          <span className="text-xs text-white/60">{timeAgo(story.createdAt)} ago</span>
+          {isMine && (
+            <button
+              onClick={() => {
+                const r = actions.deleteStory(story.id);
+                if (r.ok) {
+                  toast('Story deleted.', 'success');
+                  onClose();
+                } else toast(r.error ?? 'Could not delete story.', 'error');
+              }}
+              className="ml-auto rounded-full p-1.5 text-white/70 hover:bg-white/10"
+              aria-label="Delete my story"
+            >
+              <X size={17} />
+            </button>
+          )}
+          {!isMine && <button onClick={onClose} className="ml-auto rounded-full p-1.5 text-white/70 hover:bg-white/10" aria-label="Close stories"><X size={18} /></button>}
+        </header>
+
+        <div className="relative" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
+          {story.kind === 'text' && (
+            <div className="grid aspect-[9/14] max-h-[calc(100dvh-11rem)] place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-fuchsia-600 p-8 text-center">
+              <p className="whitespace-pre-wrap text-2xl font-bold text-white">{story.caption}</p>
+            </div>
+          )}
+          {story.kind === 'image' && story.media && (
+            <div className="relative overflow-hidden rounded-2xl">
+              <img src={story.media} alt={`Story by ${group.profile.displayName}`} className="aspect-[9/14] max-h-[calc(100dvh-11rem)] w-full object-cover" />
+              {story.caption && (
+                <p className="absolute inset-x-4 bottom-4 rounded-xl bg-black/50 px-3 py-2 text-center text-sm text-white">{story.caption}</p>
+              )}
+            </div>
+          )}
+          {story.kind === 'video' && story.media && (
+            <VideoPlayer refKey={story.media} poster={false} label={`Video story by ${group.profile.displayName}`} className="max-h-[calc(100dvh-11rem)] object-contain" />
+          )}
+
+          {/* tap zones */}
+          <button className="absolute inset-y-0 left-0 w-1/3 cursor-w-resize" aria-label="Previous story" onClick={() => advance(-1)} />
+          <button className="absolute inset-y-0 right-0 w-1/3 cursor-e-resize" aria-label="Next story" onClick={() => advance(1)} />
+          <button className="absolute left-1 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-1 text-white" aria-label="Previous" onClick={() => advance(-1)}><ChevronLeft size={20} /></button>
+          <button className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-1 text-white" aria-label="Next" onClick={() => advance(1)}><ChevronRight size={20} /></button>
+        </div>
+
+        <div className="mt-3 flex justify-between text-xs text-white/60">
+          <span>{group.stories.length} segment{group.stories.length > 1 ? 's' : ''} · expires in {hoursLeft(story.expiresAt)}h</span>
+          <button onClick={() => setGroupIdx((i) => (i + 1) % groups.length)} className="hover:text-white">
+            Next author →
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function hoursLeft(expiresAt: string): number {
+  return Math.max(1, Math.round((new Date(expiresAt).getTime() - Date.now()) / 3600_000));
+}
+
+/* ------------------------------------------------------------- composer */
+
+/** Create an ephemeral story: photo, ≤60 s video, or text (F-STO). */
+export function StoryComposer({ onClose }: { onClose: () => void }) {
+  const actions = useActions();
+  const [kind, setKind] = useState<'image' | 'video' | 'text'>('text');
+  const [media, setMedia] = useState<string | null>(null);
+  const [caption, setCaption] = useState('');
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function pick(file: File | undefined, want: 'image' | 'video') {
+    if (!file) return;
+    setBusy(true);
+    try {
+      if (want === 'image') {
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return toast('Photos must be JPEG, PNG, or WebP.', 'error');
+        if (file.size > LIMITS.imageMaxBytes) return toast('Photos must be under 5 MB.', 'error');
+        const url = await resizeImage(file);
+        setMedia(url);
+        setKind('image');
+      } else {
+        const check = await validateVideo(file);
+        if (!check.ok) return toast(check.error, 'error');
+        setMedia(await putVideo(file));
+        setKind('video');
+      }
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }
+
+  async function publish() {
+    setBusy(true);
+    const r = await actions.createStory({ kind, media, caption });
+    setBusy(false);
+    if (!r.ok) return toast(r.error ?? 'Could not add story.', 'error');
+    toast('Story live for 24 hours ⏳', 'success');
+    onClose();
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/60 p-4 backdrop-blur-2xl" role="dialog" aria-modal="true" aria-label="Add story">
+      <div className="card w-full max-w-sm p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-lg font-bold"><Timer size={17} className="text-brand-600" /> Add story</h2>
+          <button onClick={onClose} aria-label="Close" className="rounded-full p-1.5 text-slate-500 hover:bg-white/[0.06]"><X size={18} /></button>
+        </div>
+        <p className="text-xs text-slate-400">Disappears for everyone after 24 hours.</p>
+
+        <div className="mt-4 flex gap-2">
+          {(['text', 'image', 'video'] as const).map((k) => (
+            <button
+              key={k}
+              onClick={() => { setKind(k); if (k === 'text') setMedia(null); else setMedia(null); }}
+              className={`flex-1 rounded-xl border px-2 py-2 text-xs font-semibold capitalize transition ${kind === k ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-white/15 text-slate-500 hover:border-white/40'}`}
+            >
+              {k === 'text' ? 'Aa Text' : k === 'image' ? '📷 Photo' : '🎬 Video'}
+            </button>
+          ))}
+        </div>
+
+        {kind === 'text' ? (
+          <textarea
+            value={caption}
+            onChange={(e) => setCaption(e.target.value.slice(0, LIMITS.storyCaptionMax))}
+            placeholder="Say something…"
+            rows={4}
+            autoFocus
+            className="input mt-3 resize-none"
+            aria-label="Story text"
+          />
+        ) : (
+          <div className="mt-3">
+            <input
+              ref={fileRef}
+              type="file"
+              accept={kind === 'image' ? 'image/jpeg,image/png,image/webp' : 'video/mp4,video/webm,video/quicktime'}
+              hidden
+              onChange={(e) => void pick(e.target.files?.[0], kind === 'image' ? 'image' : 'video')}
+            />
+            {media ? (
+              <div className="relative overflow-hidden rounded-xl">
+                {kind === 'image' ? (
+                  <img src={media} alt="Story preview" className="max-h-64 w-full object-cover" />
+                ) : (
+                  <VideoPlayer refKey={media} label="Story video preview" className="max-h-64" />
+                )}
+                <button onClick={() => setMedia(null)} aria-label="Remove media" className="absolute right-2 top-2 rounded-full bg-black/60 p-1.5 text-white"><X size={14} /></button>
+              </div>
+            ) : (
+              <button
+                onClick={() => fileRef.current?.click()}
+                disabled={busy}
+                className="grid h-40 w-full place-items-center rounded-xl border border-dashed border-white/20 text-sm text-slate-500 hover:border-brand-500 hover:text-brand-600"
+              >
+                <Plus size={22} />
+                {kind === 'image' ? 'Pick a photo' : 'Pick a video (≤60s)'}
+              </button>
+            )}
+            <input
+              value={caption}
+              onChange={(e) => setCaption(e.target.value.slice(0, LIMITS.storyCaptionMax))}
+              placeholder="Add a caption (optional)"
+              className="input mt-2"
+              aria-label="Story caption"
+            />
+          </div>
+        )}
+
+        <button
+          onClick={publish}
+          disabled={busy || (kind === 'text' ? !caption.trim() : !media)}
+          className="btn-primary mt-4 w-full"
+        >
+          {busy ? 'Working…' : 'Share to story'}
+        </button>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+async function resizeImage(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 1080 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return canvas.toDataURL('image/jpeg', 0.82);
+}
+
+/* ------------------------------------------------------------------ bar */
+
+/** Story ring strip above the home feed (F-STO). */
+export default function StoryBar() {
+  const state = useAppState();
+  const me = currentUserProfile(state);
+  const [viewing, setViewing] = useState<number | null>(null);
+  const [composing, setComposing] = useState(false);
+  const groups = activeStories(state, state.session?.id ?? null);
+
+  if (!me || groups.length === 0) {
+    return (
+      <>
+        <div className="card flex items-center justify-between p-3">
+          <p className="text-sm text-slate-500">Share what’s happening — your story disappears after 24 hours.</p>
+          <button onClick={() => setComposing(true)} className="btn-primary px-3 py-1.5 text-xs">+ Add story</button>
+        </div>
+        {composing && <StoryComposer onClose={() => setComposing(false)} />}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="card no-scrollbar flex gap-4 overflow-x-auto p-3" aria-label="Stories">
+        {groups.map((g, i) => {
+          const mine = g.profile.id === me.id;
+          return (
+            <button
+              key={g.profile.id}
+              onClick={() => setViewing(i)}
+              className="flex w-16 shrink-0 flex-col items-center gap-1"
+              aria-label={mine ? 'View your story' : `View ${g.profile.displayName}'s story`}
+            >
+              <span className={`rounded-full p-0.5 ${mine ? 'bg-slate-200' : 'bg-gradient-to-tr from-brand-500 via-purple-500 to-pink-500'}`}>
+                <span className="block rounded-full bg-slate-950 p-0.5">
+                  <Avatar src={g.profile.avatarUrl} name={mine ? 'You' : g.profile.displayName} size={46} />
+                </span>
+              </span>
+              <span className="w-full truncate text-center text-[10px] font-medium text-slate-900">{mine ? 'Your story' : g.profile.username}</span>
+            </button>
+          );
+        })}
+        <button
+          onClick={() => setComposing(true)}
+          className="flex w-16 shrink-0 flex-col items-center gap-1"
+          aria-label="Add to your story"
+        >
+          <span className="grid h-[54px] w-[54px] place-items-center rounded-full border-2 border-dashed border-white/20 text-slate-400 hover:border-brand-500 hover:text-brand-600 hover:bg-white/[0.06]">
+            <Plus size={20} />
+          </span>
+          <span className="text-[10px] text-slate-500">Add</span>
+        </button>
+      </div>
+
+      {viewing !== null && <StoryViewer startIndex={viewing} onClose={() => setViewing(null)} />}
+      {composing && <StoryComposer onClose={() => setComposing(false)} />}
+    </>
+  );
+}
