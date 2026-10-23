@@ -1,125 +1,125 @@
 @import 'tailwindcss';
+@import './styles/tokens.css';
 
 /* ═══════════════════════════════════════════════════════════════════════
-   Circle design system — Obsidian dark palette with glass layers and
-   vibrant brand gradients (spec §2 "globals.css").
+   Circle design system (UI Design TRD §3/§4).
+   `@theme inline` maps every colour/radius utility onto the semantic tokens
+   in styles/tokens.css, so utilities resolve var() at paint time — flipping
+   data-theme/data-wallpaper on <html> re-themes the whole app at runtime
+   with no rebuild (TOK-01/02). Dark values = the previously verified
+   Obsidian palette; light values = TRD §3.1.
    ═══════════════════════════════════════════════════════════════════════ */
-@theme {
-  /* ── Obsidian neutrals ────────────────────────────────────────────────
-     The slate ramp is remapped to the dark palette so every semantic
-     utility in the app (text-slate-500, border-slate-200, bg-slate-50…)
-     resolves to the obsidian scale automatically.                       */
-  --color-slate-50: #16161a;   /* surfaces */
-  --color-slate-100: #1e1e24;  /* surfaces, hover */
-  --color-slate-200: #26262e;  /* borders (spec --border-subtle) */
-  --color-slate-300: #3a3a44;  /* stronger borders */
-  --color-slate-400: #858fa0;  /* text-subtle — AA on bg/surface/hover (AUD-06 C-1) */
-  --color-slate-500: #94a3b8;  /* text-muted */
-  --color-slate-600: #94a3b8;  /* body-muted */
-  --color-slate-700: #cbd5e1;
-  --color-slate-800: #e2e8f0;
-  --color-slate-900: #f8fafc;  /* text-main */
-  --color-slate-950: #0a0a0c;  /* bg-primary */
+@theme inline {
+  /* ── Neutral ramp → semantic surfaces/text/borders ────────────────────
+     slate-50…950 keeps its utility names but now follows the theme:
+     light = pale surfaces/dark ink, dark = obsidian surfaces/light ink. */
+  --color-slate-50: var(--surface);
+  --color-slate-100: var(--surface-2);
+  --color-slate-200: var(--border-1);
+  --color-slate-300: var(--border-2);
+  --color-slate-400: var(--text-3);
+  --color-slate-500: var(--text-2);
+  --color-slate-600: var(--text-2);
+  --color-slate-700: var(--text-ink);
+  --color-slate-800: var(--text-ink-strong);
+  --color-slate-900: var(--text-1);
+  --color-slate-950: var(--page);
 
-  /* Brand ramp oriented for dark surfaces: tints are deep, "600/700" are
-     light enough to be read as text on obsidian; 800 is the solid fill
-     that carries white text (badges, bubbles). */
-  --color-brand-50: #1e1b4b;   /* indigo chip background */
-  --color-brand-100: #312e81;  /* indigo border/tint */
-  --color-brand-200: #c7d2fe;  /* light borders/spinners (was an undefined step) */
-  --color-brand-300: #a5b4fc;  /* hover borders */
-  --color-brand-400: #818cf8;
-  --color-brand-500: #6366f1;  /* accent-primary */
-  --color-brand-600: #818cf8;  /* links/icons on obsidian */
-  --color-brand-700: #c4b5fd;  /* text on brand-50 chips */
-  --color-brand-800: #4338ca;  /* solid fill behind white text */
+  /* ── Spec token utility names (existing usage preserved) ────────────── */
+  --color-bg-primary: var(--page);
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-2);
+  --color-surface-deep: var(--surface-3);
+  --color-glass: var(--glass-bg);
+  --color-border-subtle: var(--border-1);
+  --color-border-active: var(--focus-ring);
+  --color-input-border: var(--input-b);
+  --color-txt-main: var(--text-1);
+  --color-txt-muted: var(--text-2);
+  --color-txt-subtle: var(--text-3);
 
-  /* Accent tokens (spec) */
-  --color-accent-primary: #6366f1;
-  --color-accent-pink: #ec4899;
-  --color-accent-sky: #38bdf8;
+  /* Token-driven fills replacing hard-coded white tints (Phase 3/5 sweep
+     migrates component-level `bg-white/[…]`/`border-white/…` onto these) */
+  --color-input-bg: var(--input-bg);
+  --color-input-bg-focus: var(--input-bg-focus);
+  --color-hover-wash: var(--hover-wash);
+  --color-scrim: var(--scrim);
 
-  /* Tailwind ramps that previously leaked in un-tokenised (UI-01), remapped
-     to palette-consistent values. purple-500 is darkened so the white-text
-     DM bubble gradient meets AA (AUD-06); red-500 is darkened for the white
-     badge text (AUD-06 C-3). */
-  --color-purple-500: #7c3aed;
-  --color-pink-500: #ec4899;
-  --color-fuchsia-500: #d946ef;
-  --color-fuchsia-600: #c026d3;
-  --color-sky-400: #38bdf8;
-  --color-amber-500: #f59e0b;
-  --color-red-500: #dc2626;
-  --color-emerald-500: #10b981;
-  /* Form-control boundary: ≥3:1 against bg (WCAG 1.4.11, AUD-06 C-4) */
-  --color-input-border: #62626f;
+  /* ── Brand ramp (TRD accent, blue-violet) ───────────────────────────── */
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
+  --color-brand-300: var(--brand-300);
+  --color-brand-400: var(--brand-400);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
+  --color-brand-800: var(--brand-800);
+  --color-accent-primary: var(--accent-primary);
+  --color-accent-pink: var(--accent-pink);
+  --color-accent-sky: var(--accent-sky);
 
-  /* Surface tokens (spec) */
-  --color-bg-primary: #0a0a0c;
-  --color-surface: #16161a;
-  --color-surface-hover: #1e1e24;
-  --color-surface-deep: #101014; /* recessed bars: composer strip, wells */
-  --color-glass: rgba(22, 22, 26, 0.85);
-  --color-border-subtle: #26262e;
-  --color-border-active: #6366f1;
+  /* ── Status ramps (badges, toasts, destructive states) ──────────────── */
+  --color-red-50: var(--red-50);
+  --color-red-200: var(--red-200);
+  --color-red-500: var(--red-500);
+  --color-red-600: var(--red-600);
+  --color-red-700: var(--red-700);
+  --color-red-800: var(--red-800);
+  --color-emerald-50: var(--emerald-50);
+  --color-emerald-200: var(--emerald-200);
+  --color-emerald-500: var(--emerald-500);
+  --color-emerald-600: var(--emerald-600);
+  --color-emerald-700: var(--emerald-700);
+  --color-emerald-800: var(--emerald-800);
+  --color-teal-50: var(--teal-50);
+  --color-teal-500: var(--teal-500);
+  --color-teal-600: var(--teal-600);
+  --color-teal-800: var(--teal-800);
+  --color-amber-50: var(--amber-50);
+  --color-amber-200: var(--amber-200);
+  --color-amber-500: var(--amber-500);
+  --color-amber-700: var(--amber-700);
+  --color-amber-800: var(--amber-800);
+  --color-rose-50: var(--rose-50);
+  --color-rose-500: var(--rose-500);
+  --color-rose-600: var(--rose-600);
 
-  /* Typography tokens (spec) */
-  --color-txt-main: #f8fafc;
-  --color-txt-muted: #94a3b8;
-  --color-txt-subtle: #64748b;
+  /* ── Content accents (gradients, avatars) — same hue in both themes ─── */
+  --color-purple-500: var(--purple-500);
+  --color-pink-500: var(--pink-500);
+  --color-fuchsia-500: var(--fuchsia-500);
+  --color-fuchsia-600: var(--fuchsia-600);
+  --color-sky-400: var(--sky-400);
 
-  /* Tinted status ramps — dark panel + light ink pairs */
-  --color-red-50: #2a1620;
-  --color-red-200: #7f1d1d;
-  --color-red-600: #f87171;
-  --color-red-700: #fca5a5;
-  --color-red-800: #fecaca;
-  --color-emerald-50: #0b2420;
-  --color-emerald-200: #14532d;
-  --color-emerald-600: #34d399;
-  --color-emerald-700: #6ee7b7;
-  --color-emerald-800: #a7f3d0;
-  --color-teal-50: #0c2a2b;
-  --color-teal-600: #2dd4bf;
-  --color-amber-50: #2b2210;
-  --color-amber-700: #fcd34d;
-  --color-rose-50: #2c1620;
-  --color-rose-600: #fb7185;
-}
-
-/* Spec layout tokens */
-:root {
-  --radius-card: 16px;
-  --radius-button: 9999px;
-  --backdrop-blur: blur(16px);
-  /* AA-safe: white button text needs ≥4.5 on every stop (AUD-06 C-2) */
-  --accent-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #be185d 100%);
+  /* ── Shape (TRD §3.2): pill 9999 / panel 28 / card 20 / control 14 ──── */
+  --radius-xl: var(--radius-control);
+  --radius-2xl: var(--radius-card);
+  --radius-3xl: var(--radius-panel);
 }
 
 html {
   scroll-behavior: smooth;
-  background-color: #0a0a0c;
+  background-color: var(--page);
 }
 
 body {
   @apply text-slate-900 antialiased;
   font-family: 'Inter', 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  background-color: #0a0a0c;
+  background-color: var(--page);
   overflow-x: hidden;
 }
 
-/* ── Ambient brand glow: fixed, slowly drifting color fields ──────────── */
+/* ── Wallpaper layer (§8 THM-03): preset gradient stack behind everything.
+      `solid` sets --wallpaper: none, leaving the plain page colour. ───── */
 body::before {
   content: '';
   position: fixed;
   inset: -25%;
   z-index: -1;
   pointer-events: none;
-  background:
-    radial-gradient(40% 40% at 15% 2%, rgba(99, 102, 241, 0.16), transparent 70%),
-    radial-gradient(35% 35% at 86% 6%, rgba(168, 85, 247, 0.13), transparent 70%),
-    radial-gradient(45% 45% at 92% 92%, rgba(236, 72, 153, 0.10), transparent 70%),
-    radial-gradient(40% 40% at 4% 96%, rgba(56, 189, 248, 0.08), transparent 70%);
+  background: var(--wallpaper);
   animation: aurora 48s ease-in-out infinite alternate;
   will-change: transform;
 }
@@ -129,8 +129,13 @@ body::before {
   to { transform: rotate(5deg) scale(1.08); }
 }
 
+/* THM-04 / OS reduced motion: kill the ambient drift. Declared AFTER the
+   aurora rule so source order (not just specificity) guarantees the win. */
 @media (prefers-reduced-motion: reduce) {
   body::before { animation: none; }
+}
+:root[data-reduce-effects='on'] body::before {
+  animation: none;
 }
 
 /* Spec: custom slim scrollbars */
@@ -139,35 +144,36 @@ body::before {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--color-bg-primary);
+  background: var(--page);
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border-subtle);
+  background: var(--scroll-thumb);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-txt-subtle);
+  background: var(--text-3);
 }
 
 /* WCAG: visible focus for keyboard navigation (§8 Accessibility) */
 :focus-visible {
-  outline: 2px solid var(--color-border-active);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
 /* Component layer so per-element utilities (tints, sizes) can override */
 @layer components {
-  /* Frosted surface — the default card.
+  /* Frosted surface — the default card (GLS-02: translucent fill only).
      NOTE: no backdrop-filter here on purpose — a card-level backdrop-filter
      would become the containing block for `fixed` overlays rendered inside
      cards (share sheet, report modal, story viewer), pinning them to the
      card instead of the viewport. */
   .card {
-    @apply rounded-2xl border border-border-subtle bg-surface/95 shadow-lg shadow-black/40;
+    @apply rounded-2xl border border-border-subtle bg-surface/95;
+    box-shadow: var(--card-shadow);
   }
 
   .input {
-    @apply w-full rounded-xl border border-input-border bg-white/[0.04] px-4 py-2.5 text-sm outline-none transition placeholder:text-txt-subtle focus:border-accent-primary/60 focus:bg-white/[0.07] focus:ring-4 focus:ring-accent-primary/15;
+    @apply w-full rounded-xl border border-input-border bg-input-bg px-4 py-2.5 text-sm outline-none transition placeholder:text-txt-subtle focus:border-accent-primary/60 focus:bg-input-bg-focus focus:ring-4 focus:ring-accent-primary/15;
   }
 
   /* Left icon spacing — must win over `.input`'s px-4 (declared after it) */
@@ -175,23 +181,36 @@ body::before {
     padding-left: 2.25rem;
   }
 
-  /* Primary CTA — brand gradient pill with glow */
+  /* Primary CTA — accent gradient pill with glow. Gradient stops are the
+     AA-safe "strong" pair (white text ≥4.5:1, GLS-04 over mockup estimate). */
   .btn-primary {
     @apply relative inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-50;
     background-image: var(--accent-gradient);
-    box-shadow: 0 10px 28px -10px rgba(124, 58, 237, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    box-shadow: 0 10px 28px -10px var(--btn-glow), inset 0 1px 0 rgba(255, 255, 255, 0.22);
   }
   .btn-primary:hover {
-    box-shadow: 0 12px 32px -10px rgba(190, 24, 93, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    box-shadow: 0 12px 32px -10px var(--btn-glow-hover), inset 0 1px 0 rgba(255, 255, 255, 0.3);
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-txt-muted transition hover:bg-white/[0.06] hover:text-txt-main disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-txt-muted transition hover:bg-hover-wash hover:text-txt-main disabled:opacity-50;
   }
 
-  /* Floating glass — dropdowns, popovers, toasts, top navigation */
+  /* Floating glass (§4): blur + saturate + rim + lift, with solid-fill
+     fallbacks for browsers without backdrop-filter and for reduced
+     transparency (THM-04). Mobile blur comes from --glass-blur (GLS-03). */
   .glass {
-    @apply border border-white/10 bg-glass shadow-xl shadow-black/50 backdrop-blur-2xl;
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+  }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass {
+    background: var(--glass-strong);
   }
 }
 

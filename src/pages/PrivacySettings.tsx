@@ -113,7 +113,7 @@ export default function PrivacySettings() {
                 value={v.value}
                 checked={(me.visibility ?? 'public') === v.value}
                 onChange={() => void save({ visibility: v.value }, 'Could not update visibility.')}
-                className="mt-1 h-4 w-4 shrink-0 accent-[var(--color-brand-600,#4f46e5)]"
+                className="mt-1 h-4 w-4 shrink-0 accent-[var(--brand-600)]"
               />
               <span className="text-sm">
                 <b className="font-semibold">{v.label}</b>
@@ -179,7 +179,7 @@ export default function PrivacySettings() {
               onChange={(e) =>
                 void save({ dmPermission: e.target.value as WhoCan }, 'Could not update message permission.')
               }
-              className="tap44 mt-2 w-full rounded-xl border border-[var(--input-border,#62626f)] bg-transparent px-3 py-2 text-sm"
+              className="tap44 mt-2 w-full rounded-xl border border-[var(--input-b)] bg-transparent px-3 py-2 text-sm"
             >
               {WHO_CAN.map((o) => (
                 <option key={o.value} value={o.value} className="bg-white text-slate-900">
@@ -199,7 +199,7 @@ export default function PrivacySettings() {
               onChange={(e) =>
                 void save({ cabinInvitePermission: e.target.value as WhoCan }, 'Could not update cabin invite permission.')
               }
-              className="tap44 mt-2 w-full rounded-xl border border-[var(--input-border,#62626f)] bg-transparent px-3 py-2 text-sm"
+              className="tap44 mt-2 w-full rounded-xl border border-[var(--input-b)] bg-transparent px-3 py-2 text-sm"
             >
               {WHO_CAN.map((o) => (
                 <option key={o.value} value={o.value} className="bg-white text-slate-900">

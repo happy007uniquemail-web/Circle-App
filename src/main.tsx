@@ -2,8 +2,18 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
+import { applyUiPrefs, loadUiPrefs, watchSystemUiPrefs } from './lib/uiPrefs';
 import { provider } from './lib/store';
 import './index.css';
+
+/**
+ * UI Design TRD THM-01/04: re-apply theme/wallpaper/accent prefs at boot.
+ * The pre-paint script in index.html already set data-* before first paint;
+ * this adds the accent stops (not in the inline script) and re-syncs, then
+ * follows live OS changes while mode is "system"/reduceEffects is null.
+ */
+applyUiPrefs(loadUiPrefs());
+watchSystemUiPrefs();
 
 /**
  * Realtime notifications demo (F-RT, DEV only): while the tab is visible,

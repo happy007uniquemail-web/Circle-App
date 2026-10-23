@@ -1,0 +1,374 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Circle design tokens — UI Design TRD §3/§4 (TOK-01).
+   Single source of truth: LIGHT values in :root (TRD §3.1, mockup default),
+   DARK values under [data-theme="dark"] = the previously verified Obsidian
+   palette (AUD-06 contrast work preserved). index.css maps every Tailwind
+   utility colour onto these via `@theme inline`, so flipping data-theme on
+   <html> re-themes the whole app at runtime (TOK-02, no flash: the pre-paint
+   script in index.html sets the attribute before first paint).
+   Wallpaper presets (§8 THM-03) are pure CSS gradients (0 KB network,
+   documented deviation from the TRD's WebP budget — same visual contract,
+   no copied artwork). Theme/wallpaper/accent persist under localStorage key
+   "circle.ui" via src/lib/uiPrefs.ts.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  color-scheme: light;
+
+  /* ── Accent (TRD §3.1) ───────────────────────────────────────────────
+     from/to = decorative stops; solid = flat accent; strong-from/to =
+     gradient stops that must carry WHITE text at ≥4.5:1 (GLS-04/AUD-06
+     take precedence over the mockup estimate, so these are darker than
+     the mockup's #6FA8FF→#4B6BFF). */
+  --accent-from: #6fa8ff;
+  --accent-to: #4b6bff;
+  --accent-solid: #4768f2;
+  --accent-strong-from: #3d5afe;
+  --accent-strong-to: #6242e0;
+  /* Used behind white text (btn-primary, active nav pill): AA-safe stops. */
+  --accent-gradient: linear-gradient(135deg, var(--accent-strong-from), var(--accent-strong-to));
+  /* Decorative bright gradient (dots, progress, borders). */
+  --accent-soft: linear-gradient(135deg, var(--accent-from), var(--accent-to));
+  --focus-ring: var(--accent-solid);
+
+  /* ── Semantic accents (TRD §3.1) ───────────────────────────────────── */
+  --like: #ff6b3d;
+  --success: #2fcb8a;
+  --info: #4c8dff;
+  --warning: #ffb020;
+  --danger: #ff5a6e;
+
+  /* ── Text (TRD §3.1; --text-3 darkened from #9AA1B4 to hold 4.5:1 on
+        white/light glass — contrast rules outrank the mockup estimate) ── */
+  --text-1: #1c2130;
+  --text-2: #6b7287;
+  --text-3: #626a82;
+  /* Chip/bubble ink and secondary ink (slate-700/800 slots) */
+  --text-ink: #3b4256;
+  --text-ink-strong: #2a3044;
+
+  /* ── Surfaces ──────────────────────────────────────────────────────── */
+  --page: #e9edf7;
+  --surface: #f8fafd;
+  --surface-2: #eef1f8;
+  --surface-3: #e3e8f4;
+  --border-1: #dfe4f0;
+  --border-2: #c3cbdf;
+  --input-b: #8b95ac; /* ≥3:1 against white/input fill (WCAG 1.4.11) */
+
+  /* ── Glass (TRD §3.1/§4) ───────────────────────────────────────────── */
+  --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-strong: rgba(255, 255, 255, 0.75);
+  --glass-border: rgba(255, 255, 255, 0.65);
+  --glass-shadow: 0 20px 60px rgba(30, 40, 90, 0.18);
+  --glass-blur: 24px;
+  --glass-blur-mobile: 14px;
+  --glass-saturate: 140%;
+  /* Inner content on light glass reads on a light fill, so glass panels get
+     a light text colour — set per data-theme, consumed by .glass descendants. */
+  --glass-ink: var(--text-1);
+  --glass-ink-2: var(--text-2);
+
+  /* ── Shape (TRD §3.2) ──────────────────────────────────────────────── */
+  --radius-pill: 9999px;
+  --radius-panel: 28px;
+  --radius-card: 20px;
+  --radius-control: 14px;
+
+  /* ── Layout (TRD §3.2 / §5) ────────────────────────────────────────── */
+  --sidebar-w: 200px;
+  --sidebar-collapsed: 72px;
+  --rightpanel-w: 320px;
+  --panel-max: 1280px;
+  --panel-pad: 24px;
+
+  /* ── Brand ramp remap targets (light) ──────────────────────────────── */
+  --brand-50: #e8eeff;
+  --brand-100: #d6e2ff;
+  --brand-200: #a9c3ff;
+  --brand-300: #7fa6ff;
+  --brand-400: #5b87ff;
+  --brand-500: #4768f2;
+  --brand-600: #3d5afe;
+  --brand-700: #2e49c9;
+  --brand-800: #3553e0;
+  --accent-primary: var(--accent-solid);
+  --accent-pink: #ec4899;
+  --accent-sky: #38bdf8;
+
+  /* ── Status tints (light: pale bg + dark ink) ──────────────────────── */
+  --red-50: #fff1f3;
+  --red-200: #ffd5db;
+  --red-500: #d93a50;
+  --red-600: #c72e44;
+  --red-700: #a8253a;
+  --red-800: #8f1d31;
+  --emerald-50: #e6fbf1;
+  --emerald-200: #b5f0d5;
+  --emerald-500: #12a06f;
+  --emerald-600: #0b7350;
+  --emerald-700: #095f43;
+  --emerald-800: #074e37;
+  --teal-50: #e4f9f7;
+  --teal-500: #14b8a6;
+  --teal-600: #0e7c74;
+  --teal-800: #0a5f59;
+  --amber-50: #fff7e6;
+  --amber-200: #fcd34d; /* decorative warning-card border (non-text) */
+  --amber-500: #b45309;
+  --amber-700: #7c4a00;
+  --amber-800: #92400e; /* warning-card body text on amber-50 */
+  --rose-50: #fff1f4;
+  --rose-500: #e13a5e;
+  --rose-600: #c7304f;
+  --purple-500: #7c3aed;
+  --pink-500: #ec4899;
+  --fuchsia-500: #d946ef;
+  --fuchsia-600: #c026d3;
+  --sky-400: #38bdf8;
+
+  /* ── Chrome ────────────────────────────────────────────────────────── */
+  --scroll-thumb: #b9c2d6;
+  --card-shadow: 0 10px 30px -12px rgba(30, 40, 90, 0.25);
+  --input-bg: rgba(255, 255, 255, 0.6);
+  --input-bg-focus: rgba(255, 255, 255, 0.9);
+  --hover-wash: rgba(28, 33, 48, 0.06);
+  --btn-glow: rgba(61, 90, 254, 0.45);
+  --btn-glow-hover: rgba(98, 66, 224, 0.5);
+  /* Scrim behind full-screen media (story viewer) — dark in BOTH themes. */
+  --scrim: rgba(8, 10, 16, 0.72);
+
+  /* ── Wallpaper presets (§8 THM-03): CSS gradients, light + dark pairs.
+        Default = aurora. `solid` disables the layer entirely. ─────────── */
+  --wallpaper:
+    radial-gradient(40% 40% at 15% 2%, rgba(99, 102, 241, 0.18), transparent 70%),
+    radial-gradient(35% 35% at 86% 6%, rgba(168, 85, 247, 0.15), transparent 70%),
+    radial-gradient(45% 45% at 92% 92%, rgba(236, 72, 153, 0.12), transparent 70%),
+    radial-gradient(40% 40% at 4% 96%, rgba(56, 189, 248, 0.1), transparent 70%);
+}
+
+:root[data-wallpaper='sunset'] {
+  --wallpaper:
+    radial-gradient(45% 45% at 12% 4%, rgba(255, 158, 122, 0.32), transparent 70%),
+    radial-gradient(40% 40% at 88% 10%, rgba(255, 111, 143, 0.24), transparent 70%),
+    radial-gradient(50% 50% at 85% 92%, rgba(255, 205, 112, 0.2), transparent 70%),
+    radial-gradient(40% 40% at 6% 94%, rgba(167, 139, 250, 0.16), transparent 70%);
+}
+:root[data-wallpaper='ocean'] {
+  --wallpaper:
+    radial-gradient(45% 45% at 14% 3%, rgba(56, 189, 248, 0.28), transparent 70%),
+    radial-gradient(40% 40% at 87% 8%, rgba(99, 102, 241, 0.18), transparent 70%),
+    radial-gradient(50% 50% at 90% 91%, rgba(45, 212, 191, 0.2), transparent 70%),
+    radial-gradient(40% 40% at 5% 94%, rgba(14, 165, 233, 0.14), transparent 70%);
+}
+:root[data-wallpaper='violet'] {
+  --wallpaper:
+    radial-gradient(45% 45% at 12% 4%, rgba(167, 139, 250, 0.3), transparent 70%),
+    radial-gradient(40% 40% at 88% 8%, rgba(139, 92, 246, 0.22), transparent 70%),
+    radial-gradient(45% 45% at 86% 92%, rgba(129, 140, 248, 0.18), transparent 70%),
+    radial-gradient(40% 40% at 4% 93%, rgba(232, 121, 249, 0.14), transparent 70%);
+}
+:root[data-wallpaper='forest'] {
+  --wallpaper:
+    radial-gradient(45% 45% at 13% 3%, rgba(52, 211, 153, 0.26), transparent 70%),
+    radial-gradient(40% 40% at 88% 9%, rgba(74, 222, 128, 0.18), transparent 70%),
+    radial-gradient(50% 50% at 88% 90%, rgba(45, 212, 191, 0.2), transparent 70%),
+    radial-gradient(40% 40% at 5% 94%, rgba(163, 230, 53, 0.12), transparent 70%);
+}
+:root[data-wallpaper='rose'] {
+  --wallpaper:
+    radial-gradient(45% 45% at 12% 4%, rgba(251, 113, 133, 0.28), transparent 70%),
+    radial-gradient(40% 40% at 88% 8%, rgba(244, 63, 94, 0.2), transparent 70%),
+    radial-gradient(45% 45% at 84% 92%, rgba(251, 207, 232, 0.26), transparent 70%),
+    radial-gradient(40% 40% at 5% 93%, rgba(232, 121, 249, 0.14), transparent 70%);
+}
+:root[data-wallpaper='solid'] {
+  --wallpaper: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   DARK — the previously shipped Obsidian palette (values unchanged, all
+   contrast-verified in AUD-06). Sits after the light presets so equal
+   specificity resolves dark-first for [data-theme="dark"]; dark+wallpaper
+   combos are re-stated below with higher specificity.
+   ═══════════════════════════════════════════════════════════════════════ */
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* Accent stops are theme-agnostic (TRD blue-violet, TOK-03): uiPrefs.ts
+     overwrites these five vars at runtime when a non-default preset is on. */
+  --accent-from: #6fa8ff;
+  --accent-to: #4b6bff;
+  --accent-solid: #4768f2;
+  --accent-strong-from: #3d5afe;
+  --accent-strong-to: #6242e0;
+  --accent-gradient: linear-gradient(135deg, var(--accent-strong-from), var(--accent-strong-to));
+  --accent-soft: linear-gradient(135deg, var(--accent-from), var(--accent-to));
+  --focus-ring: var(--accent-solid);
+
+  --like: #ff6b3d;
+  --success: #2fcb8a;
+  --info: #4c8dff;
+  --warning: #ffb020;
+  --danger: #ff5a6e;
+
+  --text-1: #f8fafc;
+  --text-2: #94a3b8;
+  --text-3: #858fa0;
+  --text-ink: #cbd5e1;
+  --text-ink-strong: #e2e8f0;
+
+  --page: #0a0a0c;
+  --surface: #16161a;
+  --surface-2: #1e1e24;
+  --surface-3: #101014;
+  --border-1: #26262e;
+  --border-2: #3a3a44;
+  --input-b: #62626f;
+
+  --glass-bg: rgba(19, 19, 26, 0.72);
+  --glass-strong: rgba(24, 24, 33, 0.88);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+  --glass-blur: 24px;
+  --glass-blur-mobile: 14px;
+  --glass-saturate: 140%;
+  --glass-ink: var(--text-1);
+  --glass-ink-2: var(--text-2);
+
+  --brand-50: #1e1b4b;
+  --brand-100: #312e81;
+  --brand-200: #c7d2fe;
+  --brand-300: #a5b4fc;
+  --brand-400: #818cf8;
+  --brand-500: #6366f1;
+  --brand-600: #818cf8;
+  --brand-700: #c4b5fd;
+  --brand-800: #4338ca;
+  --accent-primary: var(--accent-solid);
+  --accent-pink: #ec4899;
+  --accent-sky: #38bdf8;
+
+  --red-50: #2a1620;
+  --red-200: #7f1d1d;
+  --red-500: #dc2626;
+  --red-600: #f87171;
+  --red-700: #fca5a5;
+  --red-800: #fecaca;
+  --emerald-50: #0b2420;
+  --emerald-200: #14532d;
+  --emerald-500: #10b981;
+  --emerald-600: #34d399;
+  --emerald-700: #6ee7b7;
+  --emerald-800: #a7f3d0;
+  --teal-50: #0c2a2b;
+  --teal-500: #2dd4bf;
+  --teal-600: #5eead4;
+  --teal-800: #99f6e4;
+  --amber-50: #2b2210;
+  --amber-200: #fcd34d; /* decorative warning-card border (non-text) */
+  --amber-500: #f59e0b;
+  --amber-700: #fcd34d;
+  --amber-800: #fcd34d; /* warning-card body text on dark amber-50 */
+  --rose-50: #2c1620;
+  --rose-500: #f43f5e;
+  --rose-600: #fb7185;
+  --purple-500: #7c3aed;
+  --pink-500: #ec4899;
+  --fuchsia-500: #d946ef;
+  --fuchsia-600: #c026d3;
+  --sky-400: #38bdf8;
+
+  --scroll-thumb: #33343f;
+  --card-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.55);
+  --input-bg: rgba(255, 255, 255, 0.04);
+  --input-bg-focus: rgba(255, 255, 255, 0.07);
+  --hover-wash: rgba(255, 255, 255, 0.06);
+  --btn-glow: rgba(98, 66, 224, 0.6);
+  --btn-glow-hover: rgba(61, 90, 254, 0.5);
+  --scrim: rgba(8, 10, 16, 0.72);
+
+  --radius-pill: 9999px;
+  --radius-panel: 28px;
+  --radius-card: 20px;
+  --radius-control: 14px;
+  --sidebar-w: 200px;
+  --sidebar-collapsed: 72px;
+  --rightpanel-w: 320px;
+  --panel-max: 1280px;
+  --panel-pad: 24px;
+
+  /* Dark aurora = the previously shipped ambient fields. */
+  --wallpaper:
+    radial-gradient(40% 40% at 15% 2%, rgba(99, 102, 241, 0.16), transparent 70%),
+    radial-gradient(35% 35% at 86% 6%, rgba(168, 85, 247, 0.13), transparent 70%),
+    radial-gradient(45% 45% at 92% 92%, rgba(236, 72, 153, 0.1), transparent 70%),
+    radial-gradient(40% 40% at 4% 96%, rgba(56, 189, 248, 0.08), transparent 70%);
+}
+
+[data-theme='dark'][data-wallpaper='sunset'] {
+  --wallpaper:
+    radial-gradient(45% 45% at 12% 4%, rgba(255, 120, 80, 0.22), transparent 70%),
+    radial-gradient(40% 40% at 88% 10%, rgba(219, 39, 119, 0.2), transparent 70%),
+    radial-gradient(50% 50% at 85% 92%, rgba(245, 158, 11, 0.16), transparent 70%),
+    radial-gradient(40% 40% at 6% 94%, rgba(124, 58, 237, 0.18), transparent 70%);
+}
+[data-theme='dark'][data-wallpaper='ocean'] {
+  --wallpaper:
+    radial-gradient(45% 45% at 14% 3%, rgba(14, 165, 233, 0.24), transparent 70%),
+    radial-gradient(40% 40% at 87% 8%, rgba(79, 70, 229, 0.22), transparent 70%),
+    radial-gradient(50% 50% at 90% 91%, rgba(20, 184, 166, 0.2), transparent 70%),
+    radial-gradient(40% 40% at 5% 94%, rgba(6, 182, 212, 0.16), transparent 70%);
+}
+[data-theme='dark'][data-wallpaper='violet'] {
+  --wallpaper:
+    radial-gradient(45% 45% at 12% 4%, rgba(139, 92, 246, 0.26), transparent 70%),
+    radial-gradient(40% 40% at 88% 8%, rgba(109, 40, 217, 0.24), transparent 70%),
+    radial-gradient(45% 45% at 86% 92%, rgba(99, 102, 241, 0.2), transparent 70%),
+    radial-gradient(40% 40% at 4% 93%, rgba(217, 70, 239, 0.16), transparent 70%);
+}
+[data-theme='dark'][data-wallpaper='forest'] {
+  --wallpaper:
+    radial-gradient(45% 45% at 13% 3%, rgba(16, 185, 129, 0.22), transparent 70%),
+    radial-gradient(40% 40% at 88% 9%, rgba(34, 197, 94, 0.16), transparent 70%),
+    radial-gradient(50% 50% at 88% 90%, rgba(20, 184, 166, 0.18), transparent 70%),
+    radial-gradient(40% 40% at 5% 94%, rgba(132, 204, 22, 0.12), transparent 70%);
+}
+[data-theme='dark'][data-wallpaper='rose'] {
+  --wallpaper:
+    radial-gradient(45% 45% at 12% 4%, rgba(244, 63, 94, 0.24), transparent 70%),
+    radial-gradient(40% 40% at 88% 8%, rgba(219, 39, 119, 0.22), transparent 70%),
+    radial-gradient(45% 45% at 84% 92%, rgba(236, 72, 153, 0.18), transparent 70%),
+    radial-gradient(40% 40% at 5% 93%, rgba(190, 24, 93, 0.16), transparent 70%);
+}
+[data-theme='dark'][data-wallpaper='solid'] {
+  --wallpaper: none;
+}
+
+/* ── GLS-03: mobile browsers get a cheaper blur ───────────────────────── */
+@media (max-width: 767px) {
+  :root {
+    --glass-blur: var(--glass-blur-mobile);
+  }
+}
+
+/* ── THM-04: reduce-effects mode (user toggle or OS reduced-transparency)
+      — no blur, flat stronger fills. The matching body::before animation
+      kill switch lives in index.css AFTER the aurora rule (source order). ── */
+:root[data-reduce-effects='on'] {
+  --glass-blur: 0px;
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root:not([data-reduce-effects='off']) {
+    --glass-blur: 0px;
+  }
+}
+:root[data-reduce-effects='on'] .glass,
+:root[data-reduce-effects='on'] [data-glass-fallback] {
+  background: var(--glass-strong);
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root:not([data-reduce-effects='off']) .glass {
+    background: var(--glass-strong);
+  }
+}

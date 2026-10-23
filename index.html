@@ -4,7 +4,45 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Circle — share short posts, follow people, and join the conversation." />
-    <meta name="theme-color" content="#0A0A0C" />
+    <meta name="theme-color" content="#E9EDF7" />
+    <!-- Pre-paint theme/wallpaper/reduce-effects (UI Design TRD §8 THM-01/03/04):
+         set data-* on <html> BEFORE first paint so there is no flash of the
+         wrong theme. Reads localStorage key "circle.ui" — the shape is owned
+         by src/lib/uiPrefs.ts; if you change it, change both. Accent stops
+         are NOT applied here (no picker until the Themes page lands) — uiPrefs
+         applies them at boot in main.tsx. -->
+    <script>
+      (function () {
+        var root = document.documentElement;
+        try {
+          var p = JSON.parse(localStorage.getItem('circle.ui') || '{}');
+          var mode = p.theme === 'dark' || p.theme === 'system' ? p.theme : 'light';
+          var resolved =
+            mode === 'system'
+              ? window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light'
+              : mode;
+          root.setAttribute('data-theme', resolved);
+          root.setAttribute(
+            'data-wallpaper',
+            typeof p.wallpaper === 'string' ? p.wallpaper : 'aurora'
+          );
+          var reduce =
+            p.reduceEffects === true
+              ? true
+              : p.reduceEffects === false
+                ? false
+                : window.matchMedia('(prefers-reduced-transparency: reduce)').matches ||
+                  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          root.setAttribute('data-reduce-effects', reduce ? 'on' : 'off');
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0A0A0C' : '#E9EDF7');
+        } catch (e) {
+          root.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap" rel="stylesheet" />

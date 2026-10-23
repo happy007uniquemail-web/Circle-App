@@ -85,7 +85,7 @@ export function StoryViewer({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-2xl"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-scrim p-4 backdrop-blur-2xl"
       role="dialog"
       aria-modal="true"
       aria-label={`${group.profile.displayName}'s story`}
@@ -342,7 +342,7 @@ export default function StoryBar() {
               aria-label={mine ? 'View your story' : `View ${g.profile.displayName}'s story`}
             >
               <span className={`rounded-full p-0.5 ${mine ? 'bg-slate-200' : 'bg-gradient-to-tr from-brand-500 via-purple-500 to-pink-500'}`}>
-                <span className="block rounded-full bg-slate-950 p-0.5">
+                <span className="block rounded-full bg-scrim p-0.5">
                   <Avatar src={g.profile.avatarUrl} name={mine ? 'You' : g.profile.displayName} size={46} />
                 </span>
               </span>
