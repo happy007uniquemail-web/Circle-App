@@ -254,7 +254,7 @@ body::before {
 
   /* FEA-02: featured card bottom action strip. */
   .feat-actions {
-    @apply grid flow-row-dense grid-cols-[1fr_auto] gap-2 rounded-xl border-t border-border-subtle bg-glass-strong px-3 py-2 backdrop-blur-md;
+    @apply grid grid-cols-[1fr_auto] gap-2 rounded-xl border-t border-border-subtle bg-glass-strong px-3 py-2 backdrop-blur-md;
     border-top-color: var(--glass-border);
   }
 
