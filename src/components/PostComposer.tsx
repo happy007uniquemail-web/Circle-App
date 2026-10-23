@@ -61,6 +61,7 @@ export default function PostComposer() {
         <Avatar src={me.avatarUrl} name={me.displayName} size={40} />
         <div className="min-w-0 flex-1">
           <textarea
+            id="post-composer"
             value={body}
             onChange={(e) => setBody(e.target.value.slice(0, LIMITS.postMax))}
             placeholder="What’s happening? #hashtags welcome"

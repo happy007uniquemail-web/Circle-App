@@ -97,6 +97,12 @@
   --radius-xl: var(--radius-control);
   --radius-2xl: var(--radius-card);
   --radius-3xl: var(--radius-panel);
+
+  /* ── Breakpoints (TRD §5.2): md (768, built-in) = icon-only rail;
+        wide (1200) = full 3-column app panel. The rail-tooltip media query
+        below hard-codes 1200px to match this (media queries can't read
+        custom properties) — change both together. ─────────────────────── */
+  --breakpoint-wide: 1200px;
 }
 
 html {
@@ -138,13 +144,14 @@ body::before {
   animation: none;
 }
 
-/* Spec: custom slim scrollbars */
+/* ── Spec: custom slim scrollbars. Track is transparent so no grey gutter
+      shows inside the frosted app panel (only the thumb reads). ────────── */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--page);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: var(--scroll-thumb);
@@ -206,10 +213,31 @@ body::before {
     border: 1px solid var(--glass-border);
     box-shadow: var(--glass-shadow);
   }
+
+  /* Accent gradient fills carrying white text/icons (NAV-02 active pill,
+     TOP-03 filter button). background-image because a var() gradient can't
+     be a background-color value — no utility can express this directly. */
+  .grad-accent {
+    background-image: var(--accent-gradient);
+  }
+  /* Decorative bright stops (dots, progress, tints). */
+  .grad-soft {
+    background-image: var(--accent-soft);
+  }
+
+  /* Header / bottom-tab chrome: glass flush to the panel edge — no rim, no
+     lift (the panel itself supplies both). Goes solid under reduce-effects
+     so content scrolling beneath stays readable (tokens.css). */
+  .glass-bar {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  }
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .glass {
+  .glass,
+  .glass-bar {
     background: var(--glass-strong);
   }
 }
@@ -246,4 +274,54 @@ body::before {
 }
 .story-progress {
   animation: storygrow 5s linear forwards;
+}
+
+/* App-shell body grid (TRD §5.2): 1 column <768, 72px icon rail 768–1199,
+   full 3-column panel ≥1200. Authored here instead of md:/wide: utilities
+   because Tailwind emits a custom breakpoint's media block BEFORE its
+   built-ins, so md: would out-cascade wide: on the same property — and
+   media queries can't read custom properties anyway. Keep the widths in
+   sync with --sidebar-collapsed / --sidebar-w / --rightpanel-w. */
+.shell-body {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr); /* only the centre column scrolls */
+  grid-template-columns: 1fr;
+  min-height: 0;
+}
+@media (min-width: 768px) {
+  .shell-body {
+    grid-template-columns: var(--sidebar-collapsed) 1fr;
+  }
+}
+@media (min-width: 1200px) {
+  .shell-body {
+    grid-template-columns: var(--sidebar-w) 1fr var(--rightpanel-w);
+  }
+}
+
+/* NAV-05: icon-rail tooltips — glass chips shown on hover/focus. The media
+   query below is LAST so it beats the hover rules once the wide (≥1200px)
+   sidebar shows its labels (keep 1200 in sync with --breakpoint-wide). */
+.rail-link {
+  position: relative;
+}
+.rail-tip {
+  display: none;
+  position: absolute;
+  left: calc(100% + 0.5rem);
+  top: 50%;
+  translate: 0 -50%;
+  z-index: 60;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.rail-link:hover .rail-tip,
+.rail-link:focus-visible .rail-tip {
+  display: flex;
+  align-items: center;
+}
+@media (min-width: 1200px) {
+  .rail-tip {
+    display: none;
+  }
 }

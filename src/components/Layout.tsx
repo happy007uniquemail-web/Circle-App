@@ -1,43 +1,174 @@
-import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
+  Bell,
   Bookmark,
   Compass,
   Home,
   LogOut,
   MessageCircle,
-  Search,
+  Plus,
   Settings,
   Shield,
   Tent,
   User as UserIcon,
+  Users,
+  type LucideIcon,
 } from 'lucide-react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import Avatar from './Avatar';
 import { ConfirmHost } from './ConfirmDialog';
+import FeedFilter from './FeedFilter';
+import FeedTabs from './FeedTabs';
 import NotificationBell from './NotificationBell';
+import RightDrawer from './RightDrawer';
+import SearchBox from './SearchBox';
 import SidePanel from './SidePanel';
 import { Toaster, toast } from './Toast';
 import { useOnlineStatus } from '../lib/hooks';
-import { currentUserProfile, totalCabinUnread, unreadConversationCount, unreadCount, useActions, useAppState } from '../lib/store';
+import {
+  currentUserProfile,
+  totalCabinUnread,
+  unreadConversationCount,
+  unreadCount,
+  useActions,
+  useAppState,
+} from '../lib/store';
 
 function Brand() {
   return (
-    <NavLink to="/home" className="flex items-center gap-2 text-lg font-bold tracking-tight text-slate-900">
-      <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-800 text-white shadow-md shadow-black/40">C</span>
-      Circle
+    <NavLink
+      to="/home"
+      aria-label="Circle home"
+      className="flex shrink-0 items-center gap-2 text-lg font-bold tracking-tight text-txt-main"
+    >
+      <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-800 text-white shadow-md">
+        C
+      </span>
+      <span className="hidden sm:inline">Circle</span>
     </NavLink>
   );
 }
 
-/** Authenticated app shell: sticky glass header, optional desktop sidebars,
- *  growing main column, anchored footer, mobile tab bar (BLK-02/05). */
+/**
+ * One sidebar entry (NAV-02…05): accent-gradient pill when active, muted ink
+ * + glass wash on hover otherwise. Labels render only at ≥1200px (wide); the
+ * 768–1199px icon rail keeps the accessible name via aria-label and shows a
+ * glass tooltip on hover/focus (.rail-tip in index.css).
+ */
+function NavItem({
+  to,
+  icon: Icon,
+  label,
+  badge,
+  end,
+}: {
+  to: string;
+  icon: LucideIcon;
+  label: string;
+  badge?: number;
+  end?: boolean;
+}) {
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      aria-label={label}
+      className={({ isActive }) =>
+        `rail-link flex min-h-11 w-full items-center justify-center gap-3 rounded-full px-3 text-sm font-medium transition wide:justify-start wide:px-4 ${
+          isActive
+            ? 'grad-accent text-white shadow-md'
+            : 'text-txt-muted hover:bg-hover-wash hover:text-txt-main'
+        }`
+      }
+    >
+      {({ isActive }) => (
+        <>
+          <span className="relative shrink-0">
+            <Icon size={20} aria-hidden />
+            {typeof badge === 'number' && badge > 0 && (
+              <span
+                className={`absolute -right-2 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[10px] font-bold ${
+                  isActive ? 'bg-surface text-txt-main' : 'bg-brand-800 text-white'
+                }`}
+              >
+                {badge > 99 ? '99+' : badge}
+              </span>
+            )}
+          </span>
+          <span className="hidden wide:inline">{label}</span>
+          <span aria-hidden className="rail-tip glass rounded-xl px-2.5 py-1.5 text-xs font-medium text-txt-main">
+            {label}
+          </span>
+        </>
+      )}
+    </NavLink>
+  );
+}
+
+/** Mobile bottom tab bar entry (NAV-06): active = gradient icon well. */
+function TabLink({
+  to,
+  icon: Icon,
+  label,
+  badge,
+}: {
+  to: string;
+  icon: LucideIcon;
+  label: string;
+  badge?: number;
+}) {
+  return (
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        `tap44 flex min-w-0 flex-1 flex-col items-center justify-center gap-1 py-1.5 transition ${
+          isActive ? 'font-semibold text-txt-main' : 'font-medium text-txt-muted'
+        }`
+      }
+    >
+      {({ isActive }) => (
+        <>
+          <span
+            className={`relative grid h-6 w-10 place-items-center rounded-full ${
+              isActive ? 'grad-accent text-white shadow-md' : ''
+            }`}
+          >
+            <Icon size={19} aria-hidden />
+            {typeof badge === 'number' && badge > 0 && (
+              <span className="absolute -right-1 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-brand-800 px-1 text-[10px] font-bold text-white">
+                {badge > 99 ? '99+' : badge}
+              </span>
+            )}
+          </span>
+          <span className="truncate text-[11px] leading-none">{label}</span>
+        </>
+      )}
+    </NavLink>
+  );
+}
+
+/**
+ * Authenticated app shell — UI Design TRD §5/§6.1/§6.2.
+ *
+ * Layout is a viewport-height grid over the wallpaper: one rounded frosted
+ * "app panel" (LAY-01/02/03) whose header is fixed in place (TOP-04) and
+ * whose centre column is the ONLY thing that scrolls (no page-level double
+ * scroll). Breakpoints: <768 bottom tab bar + single column · 768–1199
+ * 72px icon rail · ≥1200 (wide) full sidebar + right panel, 24px margins.
+ * The right panel moves into a drawer (LAY-04) below 1200px.
+ *
+ * <main> is keyed by pathname so each navigation starts at scrollTop 0 —
+ * a plain scroll effect would race pages that scroll themselves (chat
+ * auto-scroll to the newest message).
+ */
 export default function Layout() {
   const state = useAppState();
   const me = currentUserProfile(state);
   const actions = useActions();
   const navigate = useNavigate();
+  const location = useLocation();
   const online = useOnlineStatus();
-  const [q, setQ] = useState('');
+  const [drawer, setDrawer] = useState(false);
   const accountRef = useRef<HTMLDetailsElement>(null);
 
   // Account menu returns to normal on any click outside it (toggle still closes on re-click).
@@ -64,249 +195,266 @@ export default function Layout() {
   const notifUnread = unreadCount(state, me.id);
   const cabinUnread = totalCabinUnread(state, me.id); // CHT-07 nav badge
 
-  function onSearch(e: FormEvent) {
-    e.preventDefault();
-    navigate(`/explore${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''}`);
-  }
-
   function signOut() {
     actions.signOut();
     navigate('/');
   }
 
-  const tabs = [
-    { to: '/home', icon: Home, label: 'Home' },
-    { to: '/explore', icon: Compass, label: 'Explore' },
-    { to: '/cabins', icon: Tent, label: 'Cabins', badge: cabinUnread },
-    { to: '/messages', icon: MessageCircle, label: 'Chats', badge: dmUnread },
-    { to: '/notifications', icon: Shield, label: 'Alerts', badge: notifUnread },
-  ];
-
+  // NAV-01 order (Home…Settings) plus Circle's own destinations that must
+  // stay reachable (Explore/Saved, and Moderation for admins). Themes joins
+  // before Settings when its page ships (UI TRD Phase 6).
   const sideNav = [
     { to: '/home', icon: Home, label: 'Home' },
-    { to: '/explore', icon: Compass, label: 'Explore' },
+    { to: `/u/${me.username}`, icon: UserIcon, label: 'Profile', end: true },
+    { to: '/notifications', icon: Bell, label: 'Activity', badge: notifUnread },
     { to: '/cabins', icon: Tent, label: 'Cabins', badge: cabinUnread },
     { to: '/messages', icon: MessageCircle, label: 'Messages', badge: dmUnread },
-    { to: '/notifications', icon: Shield, label: 'Notifications', badge: notifUnread },
+    { to: '/explore', icon: Compass, label: 'Explore' },
     { to: '/saved', icon: Bookmark, label: 'Saved' },
-    { to: `/u/${me.username}`, icon: UserIcon, label: 'Profile' },
     { to: '/settings', icon: Settings, label: 'Settings' },
-    ...(me.role === 'admin' ? [{ to: '/admin/reports', icon: Shield, label: 'Moderation' }] : []),
-  ];
+  ] satisfies ReadonlyArray<{
+    to: string;
+    icon: LucideIcon;
+    label: string;
+    badge?: number;
+    end?: boolean;
+  }>;
 
   return (
-    <div className="flex min-h-dvh flex-col pb-16 md:pb-0">
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-glass shadow-lg shadow-black/50 backdrop-blur-2xl">
-        <div className="mx-auto flex h-14 w-full max-w-[1180px] items-center gap-3 px-4">
-          <Brand />
-          <form onSubmit={onSearch} className="relative hidden max-w-xs flex-1 md:block" role="search">
-            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search people…"
-              aria-label="Search users by username or display name"
-              className="input input-icon py-2"
-            />
-          </form>
-          <div className="ml-auto flex items-center gap-1">
-            {/* Cabins in the header too: between md and lg neither the rail
-                (lg+) nor the tab bar (< md) is visible, so without this the
-                Cabins option disappears entirely at those widths (BLK/nav). */}
-            <NavLink
-              to="/cabins"
-              aria-label={`Cabins${cabinUnread ? `, ${cabinUnread} unread` : ''}`}
-              className={({ isActive }) =>
-                `tap44 relative hidden rounded-full border p-2 transition md:inline-flex lg:hidden ${
-                  isActive
-                    ? 'border-brand-500/40 bg-brand-500/15 text-brand-600'
-                    : 'border-brand-500/25 bg-brand-500/[0.07] text-slate-600 hover:border-brand-500/40 hover:bg-brand-500/15'
-                }`
-              }
-            >
-              <Tent size={20} />
-              {cabinUnread > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-brand-800 px-1 text-[10px] font-bold text-white shadow">
-                  {cabinUnread}
-                </span>
-              )}
-            </NavLink>
-            {/* Duplicated by the desktop sidebar — hidden on lg+ (BLK-05) */}
-            <NavLink
-              to="/messages"
-              aria-label={`Messages${dmUnread ? `, ${dmUnread} unread` : ''}`}
-              className={({ isActive }) =>
-                `tap44 relative rounded-full p-2 transition hover:bg-white/[0.06] lg:hidden ${isActive ? 'text-brand-600' : 'text-slate-600'}`
-              }
-            >
-              <MessageCircle size={20} />
-              {dmUnread > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-brand-800 px-1 text-[10px] font-bold text-white shadow">
-                  {dmUnread}
-                </span>
-              )}
-            </NavLink>
-            <NotificationBell />
-            <details
-              ref={accountRef}
-              className="relative"
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') accountRef.current?.removeAttribute('open');
-              }}
-            >
-              <summary
-                aria-label="Account menu"
-                className="tap44 flex cursor-pointer list-none items-center rounded-full p-1 hover:bg-white/[0.06] [&::-webkit-details-marker]:hidden"
-              >
-                <Avatar src={me.avatarUrl} name={me.displayName} size={32} />
-              </summary>
-              <div
-                onClick={(e) => e.currentTarget.parentElement?.removeAttribute('open')}
-                className="glass absolute right-0 mt-2 w-56 overflow-hidden rounded-xl py-1"
-              >
-                <div className="border-b border-white/10 px-4 py-3">
-                  <p className="truncate text-sm font-semibold">{me.displayName}</p>
-                  <p className="truncate text-xs text-slate-500">@{me.username}</p>
-                </div>
-                <MenuLink to={`/u/${me.username}`} icon={<UserIcon size={15} />} label="View profile" />
-                <MenuLink to="/saved" icon={<Bookmark size={15} />} label="Saved posts" />
-                <MenuLink to="/messages" icon={<MessageCircle size={15} />} label="Messages" />
-                <MenuLink to="/cabins" icon={<Tent size={15} />} label="Cabins" />
-                <MenuLink to="/settings" icon={<Settings size={15} />} label="Settings" />
-                {me.role === 'admin' && <MenuLink to="/admin/reports" icon={<Shield size={15} />} label="Moderation queue" />}
-                <button
-                  onClick={signOut}
-                  className="flex min-h-11 w-full items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-white/[0.06]"
-                >
-                  <LogOut size={15} /> Sign out
-                </button>
+    <div className="flex h-dvh flex-col wide:p-[var(--panel-pad)]">
+      {/* The single glass "window" over the wallpaper (§5.1): full-bleed with
+          no radius below 1200px (mobile/tablet), centred with margins at wide. */}
+      <div className="glass relative mx-auto flex min-h-0 w-full max-w-[var(--panel-max)] flex-1 flex-col rounded-none border-0 pt-[env(safe-area-inset-top)] wide:rounded-3xl wide:border">
+        {/* ── Top bar (§6.2) ────────────────────────────────────────────── */}
+        <header className="glass-bar z-40 flex-none border-b border-border-subtle wide:rounded-t-3xl">
+          <div className="relative flex h-[var(--topbar-h)] items-center gap-2 px-3 md:px-4">
+            <Brand />
+
+            {/* TOP-01 text tabs sit between brand and search — desktop only
+                (§5.1). Below 1200px the row can't fit them without overlapping
+                the search pill, so the pill tabs in row 2 carry them instead. */}
+            <div className="mx-1 hidden min-w-0 flex-1 wide:block">
+              <FeedTabs />
+            </div>
+
+            <div className="ml-auto flex items-center gap-1">
+              {/* Mobile search: icon that expands over this row (§5.2) */}
+              <div className="md:hidden">
+                <SearchBox variant="icon" />
               </div>
-            </details>
-          </div>
-        </div>
-        {!online && (
-          <p role="status" className="bg-amber-50/90 px-4 py-1.5 text-center text-xs font-medium text-amber-700 backdrop-blur">
-            You’re offline — some actions may fail until you reconnect.
-          </p>
-        )}
-        {me.isSuspended && (
-          <p role="status" className="bg-red-500/10 px-4 py-1.5 text-center text-xs font-medium text-red-700 backdrop-blur">
-            Your account is suspended — you can browse, but posting and interactions are disabled.
-          </p>
-        )}
-      </header>
 
-      {/* Wide screens: nav rail + content + secondary rail instead of empty
-          margins (BLK-05). Main grows so short pages don't float (BLK-02). */}
-      <div className="mx-auto flex w-full max-w-[1180px] flex-1 items-start gap-6 px-4">
-        <aside className="sticky top-20 hidden w-52 shrink-0 py-6 lg:block" aria-label="Primary">
-          <nav className="space-y-1">
-            {sideNav.map(({ to, icon: Icon, label, badge }) => (
-              <Fragment key={to}>
-                {/* Cabins is a first-class area — visually separated (BLK/nav) */}
-                {to === '/cabins' && (
-                  <div className="flex items-center gap-2 px-4 pb-1 pt-4" aria-hidden>
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Spaces</span>
-                    <span className="h-px flex-1 bg-white/10" />
-                  </div>
-                )}
-                <NavLink
-                  to={to}
-                  className={({ isActive }) =>
-                    to === '/cabins'
-                      ? `flex min-h-11 items-center gap-3 rounded-xl border px-4 text-sm font-semibold transition ${
-                          isActive
-                            ? 'border-brand-500/40 bg-brand-500/15 text-brand-600'
-                            : 'border-brand-500/25 bg-brand-500/[0.07] text-slate-700 hover:border-brand-500/40 hover:bg-brand-500/15'
-                        }`
-                      : `flex min-h-11 items-center gap-3 rounded-full px-4 text-sm font-medium transition hover:bg-white/[0.05] ${
-                          isActive ? 'bg-white/[0.05] text-brand-600' : 'text-slate-600'
-                        }`
-                  }
-                >
-                  <span className="relative">
-                    <Icon size={20} />
-                    {typeof badge === 'number' && badge > 0 && (
-                      <span className="absolute -right-2 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-brand-800 px-1 text-[10px] font-bold text-white">
-                        {badge > 99 ? '99+' : badge}
-                      </span>
-                    )}
+              {/* TOP-02 desktop search pill */}
+              <div className="hidden w-full max-w-[15rem] md:block lg:max-w-[16.5rem]">
+                <SearchBox variant="pill" />
+              </div>
+
+              {/* TOP-03 feed filters — desktop keeps it in the top bar;
+                  mobile/tablet render it beside the pill tabs in row 2. */}
+              <FeedFilter className="hidden wide:block" />
+
+              {/* LAY-04: right panel as a drawer below the wide breakpoint */}
+              <button
+                type="button"
+                onClick={() => setDrawer(true)}
+                aria-haspopup="dialog"
+                aria-expanded={drawer}
+                aria-label="Open discover panel"
+                className="tap44 rounded-full p-2 text-txt-muted transition hover:bg-hover-wash hover:text-txt-main wide:hidden"
+              >
+                <Users size={20} aria-hidden />
+              </button>
+
+              {/* Messages has no slot in the TRD's 5-item tab bar (NAV-06),
+                  so the mobile header keeps this shortcut below 768px; the
+                  icon rail covers every width from 768px up. */}
+              <NavLink
+                to="/messages"
+                aria-label={`Messages${dmUnread ? `, ${dmUnread} unread` : ''}`}
+                className={({ isActive }) =>
+                  `tap44 relative rounded-full p-2 transition hover:bg-hover-wash md:hidden ${
+                    isActive ? 'text-brand-600' : 'text-txt-muted'
+                  }`
+                }
+              >
+                <MessageCircle size={20} aria-hidden />
+                {dmUnread > 0 && (
+                  <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-brand-800 px-1 text-[10px] font-bold text-white shadow">
+                    {dmUnread > 99 ? '99+' : dmUnread}
                   </span>
-                  {label}
-                </NavLink>
-              </Fragment>
-            ))}
-          </nav>
-        </aside>
+                )}
+              </NavLink>
 
-        <main className="min-w-0 flex-1 py-6">
-          <Outlet />
-        </main>
+              <NotificationBell />
 
-        <aside className="sticky top-20 hidden w-72 shrink-0 py-6 xl:block" aria-label="Discover">
-          <SidePanel />
-        </aside>
+              <details
+                ref={accountRef}
+                className="relative"
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') accountRef.current?.removeAttribute('open');
+                }}
+              >
+                <summary
+                  aria-label="Account menu"
+                  className="tap44 flex cursor-pointer list-none items-center rounded-full p-1 hover:bg-hover-wash [&::-webkit-details-marker]:hidden"
+                >
+                  <Avatar src={me.avatarUrl} name={me.displayName} size={32} />
+                </summary>
+                <div
+                  onClick={(e) => e.currentTarget.parentElement?.removeAttribute('open')}
+                  className="glass absolute right-0 mt-2 w-56 overflow-hidden rounded-xl py-1"
+                >
+                  <div className="border-b border-border-subtle px-4 py-3">
+                    <p className="truncate text-sm font-semibold">{me.displayName}</p>
+                    <p className="truncate text-xs text-txt-subtle">@{me.username}</p>
+                  </div>
+                  <MenuLink to={`/u/${me.username}`} icon={<UserIcon size={15} />} label="View profile" />
+                  <MenuLink to="/saved" icon={<Bookmark size={15} />} label="Saved posts" />
+                  <MenuLink to="/messages" icon={<MessageCircle size={15} />} label="Messages" />
+                  <MenuLink to="/cabins" icon={<Tent size={15} />} label="Cabins" />
+                  <MenuLink to="/settings" icon={<Settings size={15} />} label="Settings" />
+                  {me.role === 'admin' && (
+                    <MenuLink to="/admin/reports" icon={<Shield size={15} />} label="Moderation queue" />
+                  )}
+                  <button
+                    onClick={signOut}
+                    className="flex min-h-11 w-full items-center gap-2 px-4 py-2.5 text-sm text-txt-muted hover:bg-hover-wash"
+                  >
+                    <LogOut size={15} /> Sign out
+                  </button>
+                </div>
+              </details>
+            </div>
+          </div>
+
+          {/* Row 2 below 1200px (§5.2): horizontally scrollable feed pills +
+              filter — the only home for both between 768–1199px, where row 1
+              has no room left for them (TOP-04 no overlap). */}
+          <div className="flex items-center gap-2 px-3 pb-2 wide:hidden">
+            <FeedTabs variant="pills" className="flex-1" />
+            <FeedFilter className="shrink-0" />
+          </div>
+
+          {!online && (
+            <p role="status" className="bg-amber-50/90 px-4 py-1.5 text-center text-xs font-medium text-amber-700 backdrop-blur">
+              You’re offline — some actions may fail until you reconnect.
+            </p>
+          )}
+          {me.isSuspended && (
+            <p role="status" className="bg-red-500/10 px-4 py-1.5 text-center text-xs font-medium text-red-700 backdrop-blur">
+              Your account is suspended — you can browse, but posting and interactions are disabled.
+            </p>
+          )}
+        </header>
+
+        {/* ── 3-column body (§5.1): rail/sidebar · scrolling centre · panel ─ */}
+        <div className="shell-body flex-1">
+          <aside className="hidden min-h-0 overflow-y-auto border-r border-border-subtle py-4 md:block">
+            <nav aria-label="Main" className="flex h-full min-h-0 flex-col gap-1 px-2 wide:px-3">
+              {sideNav.map((item) => (
+                <NavItem key={item.to} {...item} />
+              ))}
+              {me.role === 'admin' && (
+                <NavItem to="/admin/reports" icon={Shield} label="Moderation" />
+              )}
+              <div className="mx-1 my-2 h-px bg-border-subtle" aria-hidden />
+              <button
+                type="button"
+                onClick={signOut}
+                aria-label="Logout"
+                className="rail-link flex min-h-11 w-full items-center justify-center gap-3 rounded-full px-3 text-sm font-medium text-txt-muted transition hover:bg-hover-wash hover:text-txt-main wide:justify-start wide:px-4"
+              >
+                <LogOut size={20} aria-hidden />
+                <span className="hidden wide:inline">Logout</span>
+                <span aria-hidden className="rail-tip glass rounded-xl px-2.5 py-1.5 text-xs font-medium text-txt-main">
+                  Logout
+                </span>
+              </button>
+            </nav>
+          </aside>
+
+          <main
+            key={location.pathname}
+            id="main-scroll"
+            className="min-h-0 min-w-0 overflow-y-auto overscroll-contain px-4 py-5 wide:px-6 wide:py-6"
+          >
+            <Outlet />
+            {/* Footer scrolls with the centre column — anchored, no floating (BLK-02). */}
+            <footer className="mt-8 border-t border-border-subtle pt-5 pb-2 text-center text-xs text-txt-subtle">
+              <span aria-hidden>© 2026 Circle</span>
+              {' · '}
+              <NavLink to="/terms" className="hover:underline">
+                Terms
+              </NavLink>
+              {' · '}
+              <NavLink to="/privacy" className="hover:underline">
+                Privacy
+              </NavLink>
+            </footer>
+          </main>
+
+          <aside
+            className="hidden min-h-0 overflow-y-auto border-l border-border-subtle wide:block wide:px-5 wide:py-6"
+            aria-label="Discover"
+          >
+            <SidePanel />
+          </aside>
+        </div>
       </div>
 
-      {/* Footer stays anchored at the bottom on every width (BLK-02). */}
-      <footer className="border-t border-white/[0.06] py-5 text-center text-xs text-slate-500">
-        <span aria-hidden>© 2026 Circle</span>
-        {' · '}
-        <NavLink to="/terms" className="hover:underline">Terms</NavLink>
-        {' · '}
-        <NavLink to="/privacy" className="hover:underline">Privacy</NavLink>
-      </footer>
-
-      <Toaster />
-      <ConfirmHost />
-
-      {/* Mobile tab bar (responsive 360px → desktop, §8) */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-white/10 bg-glass shadow-lg shadow-black/50 backdrop-blur-2xl md:hidden" aria-label="Primary">
-        {tabs.map(({ to, icon: Icon, label, badge }) => {
-          const count = to === '/messages' ? dmUnread : to === '/notifications' ? notifUnread : to === '/cabins' ? cabinUnread : 0;
-          return (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                // Cabins is separated in the tab bar too: hairline dividers on
-                // both sides + a tinted (brand) backdrop so it reads as its own area.
-                to === '/cabins'
-                  ? `relative flex flex-1 flex-col items-center gap-0.5 border-x border-white/10 bg-brand-500/[0.08] py-2.5 text-[11px] font-semibold ${
-                      isActive ? 'text-brand-600' : 'text-slate-600'
-                    }`
-                  : `relative flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium ${isActive ? 'text-brand-600' : 'text-slate-500'}`
-              }
-            >
-              <span className="relative">
-                <Icon size={20} />
-                {!!badge && count > 0 && (
-                  <span className="absolute -right-1.5 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-brand-800 px-1 text-[10px] font-bold text-white">
-                    {count > 99 ? '99+' : count}
-                  </span>
-                )}
-              </span>
-              {label}
-            </NavLink>
-          );
-        })}
+      {/* ── Mobile bottom tab bar (NAV-06): 56px + safe-area, ≥44px targets ─ */}
+      <nav
+        aria-label="Primary"
+        className="glass-bar z-40 flex min-h-[calc(var(--tabbar-h)_+_env(safe-area-inset-bottom))] shrink-0 border-t border-border-subtle pb-[env(safe-area-inset-bottom)] md:hidden"
+      >
+        <TabLink to="/home" icon={Home} label="Home" />
+        <TabLink to="/cabins" icon={Tent} label="Cabins" badge={cabinUnread} />
+        <button
+          type="button"
+          onClick={() => navigate('/home?compose=1')}
+          aria-label="Create a post"
+          className="tap44 flex min-w-0 flex-1 flex-col items-center justify-center gap-1 py-1.5 text-txt-muted transition hover:text-txt-main"
+        >
+          <span className="grid h-6 w-10 place-items-center rounded-full grad-accent text-white shadow-md">
+            <Plus size={19} aria-hidden />
+          </span>
+          <span className="truncate text-[11px] font-medium leading-none">Create</span>
+        </button>
+        <TabLink to="/notifications" icon={Bell} label="Activity" badge={notifUnread} />
         <NavLink
           to={`/u/${me.username}`}
           className={({ isActive }) =>
-            `flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium ${isActive ? 'text-brand-600' : 'text-slate-500'}`
+            `tap44 flex min-w-0 flex-1 flex-col items-center justify-center gap-1 py-1.5 transition ${
+              isActive ? 'font-semibold text-txt-main' : 'font-medium text-txt-muted'
+            }`
           }
         >
-          <Avatar src={me.avatarUrl} name={me.displayName} size={20} />
-          You
+          {({ isActive }) => (
+            <>
+              <Avatar
+                src={me.avatarUrl}
+                name={me.displayName}
+                size={22}
+                className={`ring-2 ${isActive ? 'ring-accent-primary' : 'ring-transparent'}`}
+              />
+              <span className="truncate text-[11px] leading-none">Profile</span>
+            </>
+          )}
         </NavLink>
       </nav>
+
+      <RightDrawer open={drawer} onClose={() => setDrawer(false)} />
+      <Toaster />
+      <ConfirmHost />
     </div>
   );
 }
 
-function MenuLink({ to, icon, label }: { to: string; icon: React.ReactNode; label: string }) {
+function MenuLink({ to, icon, label }: { to: string; icon: ReactNode; label: string }) {
   return (
-    <NavLink to={to} className="flex min-h-11 items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-white/[0.06]">
+    <NavLink
+      to={to}
+      className="flex min-h-11 items-center gap-2 px-4 py-2.5 text-sm text-txt-muted hover:bg-hover-wash"
+    >
       {icon} {label}
     </NavLink>
   );

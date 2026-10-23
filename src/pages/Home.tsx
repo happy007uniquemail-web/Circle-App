@@ -1,12 +1,21 @@
+import { useEffect, useRef } from 'react';
 import { UserPlus } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import InfiniteFeed, { useInfiniteFeed } from '../components/InfiniteFeed';
 import PostComposer from '../components/PostComposer';
 import Avatar from '../components/Avatar';
 import FollowButton from '../components/FollowButton';
 import { FeedSkeleton } from '../components/Skeleton';
 import StoryBar from '../components/Stories';
-import { currentUserProfile, followerCount, interestsOf, isFollowing, selectFollowingFeed, sharedInterestCount, useAppState, useDataReady } from '../lib/store';
+import {
+  FEED_MODES,
+  feedFilterCount,
+  filterFeedItems,
+  normalizeFeedMode,
+  readFeedFilters,
+  selectHomeFeed,
+} from '../lib/feedModes';
+import { currentUserProfile, followerCount, interestsOf, isFollowing, sharedInterestCount, useAppState, useDataReady } from '../lib/store';
 import { LIMITS } from '../types';
 
 /** Suggested accounts — mitigates the "empty feed for new users" risk (PRD §11). */
@@ -44,18 +53,61 @@ function SuggestedFollows({ exclude }: { exclude: string }) {
   );
 }
 
-/** `/home` — reverse-chronological Following feed, 20 per page (FEED-1). */
+/** `/home` — TOP-01 feed modes (For you/Popular/Latest/Trending) and TOP-03
+ *  filters over the Following feed, 20 per page (FEED-1). Mode + filters are
+ *  URL state, so every view is shareable and survives a reload. */
 export default function Home() {
   const state = useAppState();
   const me = currentUserProfile(state);
   const ready = useDataReady();
-  const feed = useInfiniteFeed((cursor) => (me ? selectFollowingFeed(state, me.id, cursor) : { items: [], nextCursor: null }));
+  const [params, setParams] = useSearchParams();
+
+  const mode = normalizeFeedMode(params.get('feed'));
+  const filters = readFeedFilters(params);
+  const modeKey = `${mode}|${filters.type}|${filters.time}|${filters.interests.join(',')}`;
+  const modeLabel = FEED_MODES.find((m) => m.id === mode)?.label ?? 'For you';
+  const filterCount = feedFilterCount(filters);
+
+  const feed = useInfiniteFeed((cursor) => {
+    if (!me) return { items: [], nextCursor: null };
+    const page = selectHomeFeed(state, me.id, mode, cursor);
+    return { ...page, items: filterFeedItems(state, page.items, filters) };
+  });
+
+  // A mode/filter change swaps the page's cursor shape (offset vs ts~key) and
+  // must start over; also jump the scroll region back to the top of the list.
+  const prevKey = useRef(modeKey);
+  useEffect(() => {
+    if (prevKey.current === modeKey) return;
+    prevKey.current = modeKey;
+    feed.reset();
+    document.getElementById('main-scroll')?.scrollTo(0, 0);
+  }, [modeKey]);
+
+  // Mobile tab bar "Create" (§5.2) lands here: focus the composer, then
+  // consume the param so the URL stays shareable.
+  const compose = params.get('compose');
+  useEffect(() => {
+    if (compose !== '1') return;
+    const next = new URLSearchParams(params);
+    next.delete('compose');
+    setParams(next, { replace: true });
+    requestAnimationFrame(() => {
+      const el = document.getElementById('post-composer');
+      if (!(el instanceof HTMLElement)) return;
+      el.scrollIntoView({ block: 'center' });
+      el.focus({ preventScroll: true });
+    });
+  }, [compose]);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-bold">Home</h1>
-        <span className="text-xs font-medium text-slate-400">Following · newest first</span>
+        <span className="text-xs font-medium text-txt-subtle">
+          {modeLabel}
+          {filterCount > 0 && ` · ${filterCount} filter${filterCount === 1 ? '' : 's'}`}
+        </span>
       </div>
       <StoryBar />
       {/* INT-03: the gentle reminder promised by onboarding's Skip button. */}

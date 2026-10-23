@@ -81,6 +81,8 @@
   --rightpanel-w: 320px;
   --panel-max: 1280px;
   --panel-pad: 24px;
+  --topbar-h: 56px; /* header row (TOP-04) */
+  --tabbar-h: 56px; /* mobile bottom tab bar (NAV-06) */
 
   /* ── Brand ramp remap targets (light) ──────────────────────────────── */
   --brand-50: #e8eeff;
@@ -297,6 +299,8 @@
   --rightpanel-w: 320px;
   --panel-max: 1280px;
   --panel-pad: 24px;
+  --topbar-h: 56px;
+  --tabbar-h: 56px;
 
   /* Dark aurora = the previously shipped ambient fields. */
   --wallpaper:
@@ -364,11 +368,13 @@
   }
 }
 :root[data-reduce-effects='on'] .glass,
+:root[data-reduce-effects='on'] .glass-bar,
 :root[data-reduce-effects='on'] [data-glass-fallback] {
   background: var(--glass-strong);
 }
 @media (prefers-reduced-transparency: reduce) {
-  :root:not([data-reduce-effects='off']) .glass {
+  :root:not([data-reduce-effects='off']) .glass,
+  :root:not([data-reduce-effects='off']) .glass-bar {
     background: var(--glass-strong);
   }
 }
