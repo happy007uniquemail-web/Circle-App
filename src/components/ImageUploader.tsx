@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { ImagePlus, Loader2, X } from 'lucide-react';
 import { LIMITS } from '../types';
-import { compressImage, formatBytes } from '../lib/compress';
+import { compressImage, formatBytes, readAsDataUrl, sniffImageMime } from '../lib/compress';
 
 interface Props {
   value: string[];
@@ -16,6 +16,10 @@ interface Props {
  * File pick → shared compression pipeline (TRD D: ≤4/2 images, JPEG/PNG/WebP
  * by magic bytes, 10 MB before / 2 MB after compression) with a visible
  * progress indicator and per-file before→after sizes (IMG-06).
+ *
+ * Product additions: the size limit is shown up front, files over the limit
+ * produce an explicit warning naming the file and the cap, and the user can
+ * turn compression off (originals must then already fit the upload cap).
  */
 export default function ImageUploader({
   value,
@@ -26,12 +30,19 @@ export default function ImageUploader({
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [compress, setCompress] = useState(true);
   const [busy, setBusy] = useState<{ done: number; total: number; name: string } | null>(null);
   const [notes, setNotes] = useState<string[]>([]);
+
+  /** Cap applied to the picked file: pre-compress limit, or the hard upload
+   *  cap when the user opted out of compression. */
+  const capBytes = compress ? LIMITS.imageMaxBytes : LIMITS.imageMaxPostCompressBytes;
 
   async function handleFiles(files: FileList | null) {
     if (!files?.length) return;
     setError(null);
+    setWarnings([]);
     setNotes([]);
     const room = max - value.length;
     if (room <= 0) {
@@ -43,18 +54,40 @@ export default function ImageUploader({
       setError(`Only the first ${room} photo${room === 1 ? '' : 's'} were added (limit ${max}).`);
     }
     const picked: string[] = [];
+    const skipped: string[] = [];
     try {
       for (let i = 0; i < list.length; i++) {
         const file = list[i];
+        // Size-limit warning (product request): name the file and the cap.
+        if (file.size > capBytes) {
+          skipped.push(
+            `${file.name} is ${formatBytes(file.size)} — over the ${formatBytes(capBytes)} limit` +
+              (compress ? '. Pick a smaller photo.' : ' without compression. Enable compression or pick a smaller photo.'),
+          );
+          continue;
+        }
         setBusy({ done: i, total: list.length, name: file.name });
         try {
-          const out = await compressImage(file, maxEdge ? { maxEdge } : {});
-          picked.push(out.dataUrl);
-          setNotes((n) => [...n, `${file.name}: ${formatBytes(out.beforeBytes)} → ${formatBytes(out.afterBytes)}`]);
+          if (compress) {
+            const out = await compressImage(file, maxEdge ? { maxEdge } : {});
+            picked.push(out.dataUrl);
+            setNotes((n) => [...n, `${file.name}: ${formatBytes(out.beforeBytes)} → ${formatBytes(out.afterBytes)}`]);
+          } else {
+            // Compression off: pass the original through, still verified as a
+            // real JPEG/PNG/WebP (IMG-02) and capped at the upload limit.
+            const sniffed = await sniffImageMime(file);
+            if (!sniffed || !['image/jpeg', 'image/png', 'image/webp'].includes(sniffed)) {
+              skipped.push(`${file.name}: only JPEG, PNG, or WebP images are allowed.`);
+              continue;
+            }
+            picked.push(await readAsDataUrl(file));
+            setNotes((n) => [...n, `${file.name}: kept original (${formatBytes(file.size)})`]);
+          }
         } catch (e) {
           setError(e instanceof Error ? e.message : 'Could not read that image.');
         }
       }
+      if (skipped.length) setWarnings(skipped);
       if (picked.length) onChange([...value, ...picked]);
     } finally {
       setBusy(null);
@@ -112,18 +145,46 @@ export default function ImageUploader({
         aria-hidden
         onChange={(e) => void handleFiles(e.target.files)}
       />
+
+      {/* Size limit shown up front + compression option (product request) */}
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <p className="text-[11px] text-slate-500">
+          JPG, PNG or WebP · max {formatBytes(LIMITS.imageMaxBytes)} per image
+          {!compress && ` · capped at ${formatBytes(LIMITS.imageMaxPostCompressBytes)} uncompressed`}
+        </p>
+        <label className="flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-slate-600">
+          <input
+            type="checkbox"
+            checked={compress}
+            onChange={(e) => setCompress(e.target.checked)}
+            className="h-3.5 w-3.5 accent-brand-600"
+          />
+          Compress images{compress ? ' (on)' : ' (off)'}
+        </label>
+      </div>
+
       {/* Compression progress + before/after sizes (IMG-06) */}
       <div role="status" aria-live="polite" className="min-h-0">
         {busy && (
           <p className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500">
             <Loader2 size={12} className="animate-spin" />
-            Compressing {busy.name} ({busy.done + 1}/{busy.total})…
+            {compress ? 'Compressing' : 'Reading'} {busy.name} ({busy.done + 1}/{busy.total})…
           </p>
         )}
         {!busy && notes.length > 0 && (
           <p className="mt-1.5 text-xs text-slate-500">{notes.join(' · ')}</p>
         )}
       </div>
+
+      {/* Oversize / invalid-file warnings — name the file and the limit */}
+      {warnings.length > 0 && (
+        <div role="alert" className="mt-1.5 rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+          {warnings.map((w, i) => (
+            <p key={i}>{w}</p>
+          ))}
+        </div>
+      )}
+
       {label !== 'none' && value.length === 0 && !busy && (
         <button type="button" onClick={() => inputRef.current?.click()} className="mt-2 text-xs font-medium text-brand-600 hover:underline">
           {label}

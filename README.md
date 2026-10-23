@@ -38,7 +38,7 @@ In `npm run dev`, an activity simulator fires an incoming like/comment/repost/fo
 | Routing | React Router v6, lazy route chunks |
 | Data | `DataProvider` contract → `DemoProvider` (local) / `SupabaseProvider` (Supabase Auth + PostgREST + Storage + Realtime) |
 | Media | Images resized/compressed client-side then uploaded to Supabase Storage; videos ≤60 s validated, ≤50 MB (demo mode keeps blobs in **IndexedDB**) |
-| Database | PostgreSQL schema + RLS in `supabase/migrations/0001`–`0008` |
+| Database | PostgreSQL schema + RLS in `supabase/migrations/0001`–`0009` |
 | Icons | lucide-react |
 
 ## Project structure
@@ -83,6 +83,7 @@ supabase/migrations/
   0008_cabins.sql          cabins, members, join_requests, messages (+RQ), security-definer
                            join/approve/transfer functions, membership-gated RLS, member
                            counts, rate limit (20 msg/min), reports constraint extension
+   0009_cabin_tag_cap.sql   cabin interest-tag cap raised 3 → 10 (idempotent re-assert)
 docs/audit/                per-workstream fix records (see *Workstreams*)
 ```
 
@@ -107,10 +108,10 @@ The app was audited and hardened workstream-by-workstream; each has a fix record
 
 The app picks its provider at boot (`src/lib/store.ts` factory): with `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` configured it runs **`SupabaseProvider`**; without them it falls back to the offline **`DemoProvider`**. To go live:
 
-1. **Create a Supabase project** and apply all eight migrations **in order** (SQL editor or CLI):
+1. **Create a Supabase project** and apply all nine migrations **in order** (SQL editor or CLI):
    ```bash
    supabase link --project-ref <ref>
-   supabase db push   # 0001 → 0002 → … → 0008_cabins.sql
+   supabase db push   # 0001 → 0002 → … → 0009_cabin_tag_cap.sql
    ```
    Every migration is idempotent-safe to re-run where possible (`if exists` / `on conflict do nothing`); run them once each, in filename order. If a migration fails, copy the verbatim Postgres error — each file's objects are independent enough to fix forward.
 2. **Enable Realtime** for the app's live tables (Supabase dashboard → Database → Replication): the migrations add them to the `supabase_realtime` publication, but verify `messages`, `notifications`, `cabin_messages` and the graph tables show as replicated.
@@ -143,9 +144,9 @@ RLS is the security matrix: every table has policies, default deny; notification
 
 ## Limits configuration
 
-All client-visible limits live in **`src/config/limits.ts`** (`LIMITS`) — the single source imported by pages/components. The **server is authoritative**: matching constants are enforced in SQL (check constraints + triggers in `0001`–`0008`); the client values are UX checks layered on top. Keep the two in sync when changing anything — each `LIMITS` entry names its SQL counterpart in a comment.
+All client-visible limits live in **`src/config/limits.ts`** (`LIMITS`) — the single source imported by pages/components. The **server is authoritative**: matching constants are enforced in SQL (check constraints + triggers in `0001`–`0009`); the client values are UX checks layered on top. Keep the two in sync when changing anything — each `LIMITS` entry names its SQL counterpart in a comment.
 
-Highlights: posts ≤500 chars, comments ≤300, bio ≤160; ≤4 images/post (≤2 MB each after compression, ≤1600 px) **or** 1 video (≤60 s, ≤50 MB, ≤1080p, ≤8 Mbps); ≤10 hashtags; DMs ≤1000 chars (20/10 min); stories 24 h TTL; interests 3–10 (10 DB-enforced); cabins — own ≤5, joined ≤50, 500 members max, name 3–40 unique, 1–3 tags, request message ≤200, chat ≤2000 chars at ~20 msg/min.
+Highlights: posts ≤500 chars, comments ≤300, bio ≤160; ≤4 images/post (≤2 MB each after compression, ≤1600 px) **or** 1 video (≤60 s, ≤50 MB, ≤1080p, ≤8 Mbps); ≤10 hashtags; DMs ≤1000 chars (20/10 min); stories 24 h TTL; interests 3–10 (10 DB-enforced); cabins — own ≤5, joined ≤50, 500 members max, name 3–40 unique, 1–10 tags, request message ≤200, chat ≤2000 chars at ~20 msg/min.
 
 ## Storage & quota monitoring (QTA)
 
@@ -179,7 +180,7 @@ Enforced server-side in `0004_media_safety.sql`:
 
 - [x] Netlify site connected to the repo (`npm run build`, publish `dist`, SPA redirect, security headers) — https://circyy.netlify.app
 - [ ] Disable Netlify password protection (site must be publicly reachable)
-- [ ] All eight migrations applied in order (`0001` → `0008`)
+- [ ] All nine migrations applied in order (`0001` → `0009`)
 - [ ] Realtime publication verified for messages/notifications/cabin tables
 - [ ] Supabase Auth: Email on; Google OAuth client + callback/origins whitelisted
 - [ ] Supabase URL configuration: Site URL = production origin, `localhost:5173` in Redirect URLs

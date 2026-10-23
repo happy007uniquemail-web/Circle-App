@@ -339,15 +339,15 @@ create trigger cabin_members_track_count_del
   after delete on public.cabin_members
   for each row execute function public.cabin_members_count();
 
--- CAB-01: 1–3 interest tags (max server-side; min-1 is the create-form rule).
+-- CAB-01: 1–10 interest tags (max server-side; min-1 is the create-form rule).
 create or replace function public.enforce_cabin_interest_count()
 returns trigger
 language plpgsql security definer set search_path = public as $$
 declare v_count integer;
 begin
   select count(*) into v_count from public.cabin_interests where cabin_id = new.cabin_id;
-  if v_count >= 3 then
-    raise exception 'Cabins can have at most 3 interest tags.';
+  if v_count >= 10 then
+    raise exception 'Cabins can have at most 10 interest tags.';
   end if;
   return new;
 end;

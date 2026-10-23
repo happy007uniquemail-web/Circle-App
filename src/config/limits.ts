@@ -40,7 +40,7 @@ export const LIMITS = {
   cabinNameMax: 40, // CAB-01
   cabinDescMax: 300, // CAB-01
   cabinTagsMin: 1,
-  cabinTagsMax: 3, // CAB-01 (server: enforce_cabin_interest_count)
+  cabinTagsMax: 10, // CAB-01 raised 3→10 by product request (0009); server: enforce_cabin_interest_count
   cabinRequestMsgMax: 200, // CAB-11 (server: enforce_join_request_insert)
   cabinMessageMax: 2000, // CHT-04 (server: check constraint)
   /** CHT-11 rate limit; server: enforce_cabin_message_rate (20/min). */

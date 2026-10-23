@@ -14,7 +14,7 @@ import type { CabinType } from '../types';
  * Rules mirrored from the 0008 triggers (server remains authoritative):
  * - name 3–40, unique case-insensitive, reserved words blocked (CAB-01/08)
  * - description ≤300 (CAB-01), image compressed client-side per workstream D
- * - 1–3 interest tags required (CAB-01), type open | request (§14: request
+ * - 1–10 interest tags required, min 1 (CAB-01; cap raised 3→10 in 0009), type open | request (§14: request
  *   cabins are visible in discovery)
  */
 export default function CabinForm() {
@@ -184,7 +184,7 @@ export default function CabinForm() {
           </div>
         </fieldset>
 
-        {/* Interest tags (CAB-01: 1–3 required) */}
+        {/* Interest tags (CAB-01: 1–10, min 1 required) */}
         <div>
           <span className="mb-1.5 block text-sm font-semibold">
             Interest tags <span className="text-slate-400 font-normal">({LIMITS.cabinTagsMin}–{LIMITS.cabinTagsMax} required)</span>

@@ -144,8 +144,9 @@ export function StoryViewer({
           {/* tap zones */}
           <button className="absolute inset-y-0 left-0 w-1/3 cursor-w-resize" aria-label="Previous story" onClick={() => advance(-1)} />
           <button className="absolute inset-y-0 right-0 w-1/3 cursor-e-resize" aria-label="Next story" onClick={() => advance(1)} />
-          <button className="tap44 absolute left-1 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-1 text-white" aria-label="Previous" onClick={() => advance(-1)}><ChevronLeft size={20} /></button>
-          <button className="tap44 absolute right-1 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-1 text-white" aria-label="Next" onClick={() => advance(1)}><ChevronRight size={20} /></button>
+          {/* chevrons straddle the story border at the vertical middle */}
+          <button className="tap44 absolute -left-3.5 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/50 p-1 text-white ring-1 ring-white/20 backdrop-blur hover:bg-black/70" aria-label="Previous" onClick={() => advance(-1)}><ChevronLeft size={20} /></button>
+          <button className="tap44 absolute -right-3.5 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/50 p-1 text-white ring-1 ring-white/20 backdrop-blur hover:bg-black/70" aria-label="Next" onClick={() => advance(1)}><ChevronRight size={20} /></button>
         </div>
 
         <div className="mt-3 flex justify-between text-xs text-white/60">

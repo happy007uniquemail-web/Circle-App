@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   Bookmark,
   Compass,
@@ -180,25 +180,39 @@ export default function Layout() {
         <aside className="sticky top-20 hidden w-52 shrink-0 py-6 lg:block" aria-label="Primary">
           <nav className="space-y-1">
             {sideNav.map(({ to, icon: Icon, label, badge }) => (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) =>
-                  `flex min-h-11 items-center gap-3 rounded-full px-4 text-sm font-medium transition hover:bg-white/[0.05] ${
-                    isActive ? 'bg-white/[0.05] text-brand-600' : 'text-slate-600'
-                  }`
-                }
-              >
-                <span className="relative">
-                  <Icon size={20} />
-                  {typeof badge === 'number' && badge > 0 && (
-                    <span className="absolute -right-2 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-brand-800 px-1 text-[10px] font-bold text-white">
-                      {badge > 99 ? '99+' : badge}
-                    </span>
-                  )}
-                </span>
-                {label}
-              </NavLink>
+              <Fragment key={to}>
+                {/* Cabins is a first-class area — visually separated (BLK/nav) */}
+                {to === '/cabins' && (
+                  <div className="flex items-center gap-2 px-4 pb-1 pt-4" aria-hidden>
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Spaces</span>
+                    <span className="h-px flex-1 bg-white/10" />
+                  </div>
+                )}
+                <NavLink
+                  to={to}
+                  className={({ isActive }) =>
+                    to === '/cabins'
+                      ? `flex min-h-11 items-center gap-3 rounded-xl border px-4 text-sm font-semibold transition ${
+                          isActive
+                            ? 'border-brand-500/40 bg-brand-500/15 text-brand-600'
+                            : 'border-brand-500/25 bg-brand-500/[0.07] text-slate-700 hover:border-brand-500/40 hover:bg-brand-500/15'
+                        }`
+                      : `flex min-h-11 items-center gap-3 rounded-full px-4 text-sm font-medium transition hover:bg-white/[0.05] ${
+                          isActive ? 'bg-white/[0.05] text-brand-600' : 'text-slate-600'
+                        }`
+                  }
+                >
+                  <span className="relative">
+                    <Icon size={20} />
+                    {typeof badge === 'number' && badge > 0 && (
+                      <span className="absolute -right-2 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-brand-800 px-1 text-[10px] font-bold text-white">
+                        {badge > 99 ? '99+' : badge}
+                      </span>
+                    )}
+                  </span>
+                  {label}
+                </NavLink>
+              </Fragment>
             ))}
           </nav>
         </aside>
@@ -233,7 +247,13 @@ export default function Layout() {
               key={to}
               to={to}
               className={({ isActive }) =>
-                `relative flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium ${isActive ? 'text-brand-600' : 'text-slate-500'}`
+                // Cabins is separated in the tab bar too: hairline dividers on
+                // both sides + a tinted (brand) backdrop so it reads as its own area.
+                to === '/cabins'
+                  ? `relative flex flex-1 flex-col items-center gap-0.5 border-x border-white/10 bg-brand-500/[0.08] py-2.5 text-[11px] font-semibold ${
+                      isActive ? 'text-brand-600' : 'text-slate-600'
+                    }`
+                  : `relative flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium ${isActive ? 'text-brand-600' : 'text-slate-500'}`
               }
             >
               <span className="relative">

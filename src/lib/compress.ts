@@ -54,6 +54,14 @@ function toDataUrl(blob: Blob): Promise<string> {
 }
 
 /**
+ * Read a file as a data URL without re-encoding — the pass-through path when
+ * the user turns compression off in `ImageUploader` (size cap still applies).
+ */
+export function readAsDataUrl(file: Blob): Promise<string> {
+  return toDataUrl(file);
+}
+
+/**
  * Compress one image for storage. Throws an error with a user-readable
  * message when the file is too big, not a real image, or cannot be brought
  * under the post-compress cap.

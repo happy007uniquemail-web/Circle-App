@@ -7,7 +7,7 @@ Migration: `supabase/migrations/0008_cabins.sql` (5 tables, 20 functions, 17 tri
 
 | ID | Requirement | Status | Where |
 |----|-------------|--------|-------|
-| CAB-01 | Create cabin: name 3–40 unique case-insensitive, desc ≤300, cover image (compressed), type Open/Request, 1–3 interest tags | ✔ | `CabinForm.tsx` (live unique-check + counters), `0008` name/desc triggers, demo `validateCabinInput` |
+| CAB-01 | Create cabin: name 3–40 unique case-insensitive, desc ≤300, cover image (compressed), type Open/Request, 1–10 interest tags (min 1) | ✔ | `CabinForm.tsx` (live unique-check + counters), `0008` name/desc triggers, demo `validateCabinInput`; cap raised 3→10 by product request — `0009_cabin_tag_cap.sql` |
 | CAB-02 | Creator becomes owner; roles owner / admin / member | ✔ | `join_cabin()`/`approve_join_request()` seed role owner/member; owner can promote via transfer |
 | CAB-03 | "Explore Cabins": search, interest filter, "Suggested for you" (interest match), member counts, pagination | ✔ | `Cabins.tsx` (My cabins + Suggested + list, 48-chip filter, PAGE=12); `suggestCabinsByInterests` |
 | CAB-04 | Detail page: info, interests, join/request button, member list respecting privacy/blocks | ✔ | `CabinDetail.tsx` header + panels (§9.7 member-only list — note 1) |

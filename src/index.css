@@ -205,14 +205,19 @@ body::before {
 }
 
 /* UI-07: expand a small control's hit area to ≥44×44 px without changing
-   its visual size (the pseudo-element is part of the button's hit box). */
-.tap44 {
-  position: relative;
-}
-.tap44::after {
-  content: '';
-  position: absolute;
-  inset: -12px;
+   its visual size (the pseudo-element is part of the button's hit box).
+   Declared in @layer components so Tailwind's layered utilities win:
+   `tap44 absolute` must stay absolutely positioned (unlayered CSS would
+   beat the utilities layer and force these back into normal flow). */
+@layer components {
+  .tap44 {
+    position: relative;
+  }
+  .tap44::after {
+    content: '';
+    position: absolute;
+    inset: -12px;
+  }
 }
 
 /* Story segment auto-advance (F-STO) */
