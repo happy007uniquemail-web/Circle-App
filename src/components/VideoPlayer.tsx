@@ -17,6 +17,9 @@ interface Props {
 export default function VideoPlayer({ refKey, className = '', poster = true, downloadable = false, label }: Props) {
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  // Callers that pass any `w-*` class own the sizing (e.g. story frames use
+  // `w-auto` so the player hugs the video's intrinsic aspect ratio).
+  const width = /(^|\s)w-/.test(className) ? '' : 'w-full';
 
   useEffect(() => {
     let alive = true;
@@ -51,7 +54,7 @@ export default function VideoPlayer({ refKey, className = '', poster = true, dow
         preload="metadata"
         playsInline
         aria-label={label}
-        className={`w-full rounded-xl border border-white/10 bg-black ${className}`}
+        className={`${width} rounded-xl border border-white/10 bg-black ${className}`}
       />
       {downloadable && (
         <button

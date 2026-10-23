@@ -74,6 +74,15 @@ export function StoryViewer({
   if (!group || !story) return null;
   const isMine = story.userId === me?.id;
 
+  // Chevron pair re-used by each media frame — anchored INSIDE the frame so
+  // they straddle the actual media edges (the frame hugs the media format).
+  const chevrons = (
+    <>
+      <button className="tap44 absolute -left-3.5 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/50 p-1 text-white ring-1 ring-white/20 backdrop-blur hover:bg-black/70" aria-label="Previous" onClick={() => advance(-1)}><ChevronLeft size={20} /></button>
+      <button className="tap44 absolute -right-3.5 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/50 p-1 text-white ring-1 ring-white/20 backdrop-blur hover:bg-black/70" aria-label="Next" onClick={() => advance(1)}><ChevronRight size={20} /></button>
+    </>
+  );
+
   return createPortal(
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-2xl"
@@ -125,28 +134,34 @@ export function StoryViewer({
 
         <div className="relative" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
           {story.kind === 'text' && (
-            <div className="grid aspect-[9/14] max-h-[calc(100dvh-11rem)] place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-fuchsia-600 p-8 text-center">
+            <div className="relative grid aspect-[9/14] max-h-[calc(100dvh-11rem)] place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-fuchsia-600 p-8 text-center">
               <p className="whitespace-pre-wrap text-2xl font-bold text-white">{story.caption}</p>
+              {chevrons}
             </div>
           )}
           {story.kind === 'image' && story.media && (
-            <div className="relative overflow-hidden rounded-2xl">
-              <img src={story.media} alt={`Story by ${group.profile.displayName}`} className="aspect-[9/14] max-h-[calc(100dvh-11rem)] w-full object-cover" />
+            /* Frame hugs the photo's own aspect ratio — shown exactly as chosen, uncropped */
+            <div className="relative mx-auto w-fit max-w-full">
+              <img src={story.media} alt={`Story by ${group.profile.displayName}`} className="block max-h-[calc(100dvh-11rem)] max-w-full rounded-2xl bg-black" />
               {story.caption && (
                 <p className="absolute inset-x-4 bottom-4 rounded-xl bg-black/50 px-3 py-2 text-center text-sm text-white">{story.caption}</p>
               )}
+              {chevrons}
             </div>
           )}
           {story.kind === 'video' && story.media && (
-            <VideoPlayer refKey={story.media} poster={false} label={`Video story by ${group.profile.displayName}`} className="max-h-[calc(100dvh-11rem)] object-contain" />
+            /* Same contract for video: the frame matches the video's intrinsic format */
+            <div className="relative mx-auto w-fit max-w-full">
+              <VideoPlayer refKey={story.media} poster={false} label={`Video story by ${group.profile.displayName}`} className="max-h-[calc(100dvh-11rem)] w-auto object-contain" />
+              {chevrons}
+            </div>
           )}
 
-          {/* tap zones */}
-          <button className="absolute inset-y-0 left-0 w-1/3 cursor-w-resize" aria-label="Previous story" onClick={() => advance(-1)} />
-          <button className="absolute inset-y-0 right-0 w-1/3 cursor-e-resize" aria-label="Next story" onClick={() => advance(1)} />
-          {/* chevrons straddle the story border at the vertical middle */}
-          <button className="tap44 absolute -left-3.5 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/50 p-1 text-white ring-1 ring-white/20 backdrop-blur hover:bg-black/70" aria-label="Previous" onClick={() => advance(-1)}><ChevronLeft size={20} /></button>
-          <button className="tap44 absolute -right-3.5 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/50 p-1 text-white ring-1 ring-white/20 backdrop-blur hover:bg-black/70" aria-label="Next" onClick={() => advance(1)}><ChevronRight size={20} /></button>
+          {/* Tap zones span the stage (not the frame) so portrait media still has wide
+              tap areas; for video they stop above the native control bar so the
+              play/scrub controls remain clickable. */}
+          <button className={`absolute left-0 w-1/3 cursor-w-resize ${story.kind === 'video' ? 'top-0 bottom-12' : 'inset-y-0'}`} aria-label="Previous story" onClick={() => advance(-1)} />
+          <button className={`absolute right-0 w-1/3 cursor-e-resize ${story.kind === 'video' ? 'top-0 bottom-12' : 'inset-y-0'}`} aria-label="Next story" onClick={() => advance(1)} />
         </div>
 
         <div className="mt-3 flex justify-between text-xs text-white/60">
@@ -251,11 +266,12 @@ export function StoryComposer({ onClose }: { onClose: () => void }) {
               onChange={(e) => void pick(e.target.files?.[0], kind === 'image' ? 'image' : 'video')}
             />
             {media ? (
-              <div className="relative overflow-hidden rounded-xl">
+              /* Preview matches the chosen media's format — no cropping */
+              <div className="relative mx-auto w-fit max-w-full rounded-xl">
                 {kind === 'image' ? (
-                  <img src={media} alt="Story preview" className="max-h-64 w-full object-cover" />
+                  <img src={media} alt="Story preview" className="block max-h-64 max-w-full rounded-xl" />
                 ) : (
-                  <VideoPlayer refKey={media} label="Story video preview" className="max-h-64" />
+                  <VideoPlayer refKey={media} label="Story video preview" className="max-h-64 w-auto object-contain" />
                 )}
                 <button onClick={() => setMedia(null)} aria-label="Remove media" className="tap44 absolute right-2 top-2 rounded-full bg-black/60 p-1.5 text-white"><X size={14} /></button>
               </div>
