@@ -14,6 +14,12 @@ import type {
   AppNotification,
   AppState,
   Block,
+  Cabin,
+  CabinInput,
+  CabinInterest,
+  CabinJoinRequest,
+  CabinMember,
+  CabinMessage,
   Comment,
   Conversation,
   FeedItem,
@@ -109,6 +115,39 @@ export interface DataProvider {
   startConversation(otherId: string): MaybePromise<ConversationResult>;
   sendMessage(conversationId: string, body: string, media: { kind: MediaKind; ref: string } | null, postId: string | null): MaybePromise<Result>;
   markConversationRead(conversationId: string): MaybePromise<Result>;
+  /* --- cabins (Workstream G: CAB-01..15, CHT-01..14) --- */
+  /** CAB-01/02: create; caller becomes owner (server trigger inserts the row). */
+  createCabin(input: CabinInput): MaybePromise<Result & { id?: string }>;
+  /** CAB-06: owner/admin edit (name, description, image, type, tags). */
+  updateCabin(cabinId: string, patch: Partial<CabinInput>): MaybePromise<Result>;
+  /** CAB-07: owner-only delete; cascades members/messages/interests. */
+  deleteCabin(cabinId: string): MaybePromise<Result>;
+  /** CAB-10: join an open cabin instantly (server checks limits/bans). */
+  joinCabin(cabinId: string): MaybePromise<Result>;
+  /** CAB-13: leave (owner must transfer first — server-enforced). */
+  leaveCabin(cabinId: string): MaybePromise<Result>;
+  /** CAB-11: request to join a request-type cabin (message ≤200). */
+  requestJoin(cabinId: string, message: string): MaybePromise<Result>;
+  /** CAB-13: cancel my pending request. */
+  cancelCabinRequest(requestId: string): MaybePromise<Result>;
+  /** CAB-12: owner/admin approves (server function inserts membership). */
+  approveCabinRequest(requestId: string): MaybePromise<Result>;
+  /** CAB-12: owner/admin declines; requester is notified. */
+  declineCabinRequest(requestId: string): MaybePromise<Result>;
+  /** CHT-03/04: send text (≤2000) and/or one compressed image; realtime fan-out. */
+  sendCabinMessage(cabinId: string, body: string, imageRef: string | null, replyTo: string | null): MaybePromise<Result & { id?: string }>;
+  /** CHT-08: soft delete (sender or admin); body/image become null. */
+  deleteCabinMessage(messageId: string): MaybePromise<Result>;
+  /** CHT-07: stamp last_read_at = now for my membership row. */
+  markCabinRead(cabinId: string): MaybePromise<Result>;
+  /** CHT-13: mute/unmute a cabin's notifications (my membership row). */
+  muteCabin(cabinId: string, muted: boolean): MaybePromise<Result>;
+  /** CHT-12: owner/admin removes a member (not the owner — server guard). */
+  removeCabinMember(cabinId: string, userId: string): MaybePromise<Result>;
+  /** CHT-12: owner/admin bans; CAB-14 blocks rejoin (server-enforced). */
+  banCabinMember(cabinId: string, userId: string): MaybePromise<Result>;
+  /** CAB-13: owner transfers ownership to an active member. */
+  transferCabinOwnership(cabinId: string, userId: string): MaybePromise<Result>;
   getFollowingFeed(cursor: string | null, limit?: number): MaybePromise<FeedPage>;
   getExploreFeed(cursor: string | null, limit?: number): MaybePromise<FeedPage>;
   searchUsers(q: string, limit?: number): MaybePromise<Profile[]>;
@@ -188,6 +227,79 @@ const SEED_USER_INTERESTS: UserInterest[] = SEED_PICKS.flatMap(([userId, names])
     createdAt: new Date(Date.now() - 48 * HOUR).toISOString(),
   })),
 );
+
+/* ---------------------------------------------------------- demo cabins (G) */
+
+const iso = (mins: number) => new Date(Date.now() - mins * 60_000).toISOString();
+
+const SEED_CABINS: Cabin[] = [
+  { id: 'cab_photo', name: 'Photo Walks', description: 'Weekend photo walks around the city — routes, gear talk, and shots.', imageUrl: null, type: 'open', ownerId: 'p_maya', maxMembers: 500, memberCount: 3, createdAt: iso(60 * 24 * 21) },
+  { id: 'cab_frontend', name: 'Frontend Collective', description: 'React, CSS, performance — ship it together.', imageUrl: null, type: 'open', ownerId: 'p_sam', maxMembers: 500, memberCount: 3, createdAt: iso(60 * 24 * 18) },
+  { id: 'cab_hike', name: 'Weekend Hikers', description: 'Trails, tips, and trip planning. Approval required to keep it focused.', imageUrl: null, type: 'request', ownerId: 'p_lena', maxMembers: 500, memberCount: 3, createdAt: iso(60 * 24 * 12) },
+  { id: 'cab_scifi', name: 'Sci-Fi Book Club', description: 'One book a month. No spoilers outside the marked chapters.', imageUrl: null, type: 'open', ownerId: 'p_nina', maxMembers: 500, memberCount: 4, createdAt: iso(60 * 24 * 9) },
+  { id: 'cab_food', name: 'Street Food Explorers', description: 'Stalls, hole-in-the-walls, and the best cheap eats in town.', imageUrl: null, type: 'open', ownerId: 'p_zoe', maxMembers: 500, memberCount: 5, createdAt: iso(60 * 24 * 6) },
+];
+
+const SEED_CABIN_INTERESTS: CabinInterest[] = [
+  { cabinId: 'cab_photo', interestId: IID('Photography') },
+  { cabinId: 'cab_photo', interestId: IID('Drawing') },
+  { cabinId: 'cab_frontend', interestId: IID('Web dev') },
+  { cabinId: 'cab_frontend', interestId: IID('Open source') },
+  { cabinId: 'cab_frontend', interestId: IID('AI') },
+  { cabinId: 'cab_hike', interestId: IID('Hiking') },
+  { cabinId: 'cab_hike', interestId: IID('Backpacking') },
+  { cabinId: 'cab_scifi', interestId: IID('Fiction') },
+  { cabinId: 'cab_scifi', interestId: IID('Sci-fi') },
+  { cabinId: 'cab_food', interestId: IID('Street food') },
+  { cabinId: 'cab_food', interestId: IID('Vegan cooking') },
+];
+
+const SEED_CABIN_MEMBERS: CabinMember[] = [
+  { cabinId: 'cab_photo', userId: 'p_maya', role: 'owner', status: 'active', muted: false, lastReadAt: iso(5), joinedAt: iso(60 * 24 * 21) },
+  { cabinId: 'cab_photo', userId: 'p_omar', role: 'admin', status: 'active', muted: false, lastReadAt: iso(60 * 6), joinedAt: iso(60 * 24 * 20) },
+  { cabinId: 'cab_photo', userId: 'p_lena', role: 'member', status: 'active', muted: false, lastReadAt: iso(60 * 6), joinedAt: iso(60 * 24 * 15) },
+  { cabinId: 'cab_frontend', userId: 'p_sam', role: 'owner', status: 'active', muted: false, lastReadAt: iso(30), joinedAt: iso(60 * 24 * 18) },
+  { cabinId: 'cab_frontend', userId: 'p_omar', role: 'admin', status: 'active', muted: false, lastReadAt: iso(30), joinedAt: iso(60 * 24 * 17) },
+  { cabinId: 'cab_frontend', userId: 'p_you', role: 'member', status: 'active', muted: false, lastReadAt: iso(70), joinedAt: iso(60 * 24 * 10) },
+  { cabinId: 'cab_hike', userId: 'p_lena', role: 'owner', status: 'active', muted: false, lastReadAt: iso(20), joinedAt: iso(60 * 24 * 12) },
+  { cabinId: 'cab_hike', userId: 'p_zoe', role: 'member', status: 'active', muted: false, lastReadAt: iso(60 * 8), joinedAt: iso(60 * 24 * 11) },
+  { cabinId: 'cab_hike', userId: 'p_maya', role: 'member', status: 'active', muted: false, lastReadAt: iso(60 * 8), joinedAt: iso(60 * 24 * 10) },
+  { cabinId: 'cab_scifi', userId: 'p_nina', role: 'owner', status: 'active', muted: false, lastReadAt: iso(400), joinedAt: iso(60 * 24 * 9) },
+  { cabinId: 'cab_scifi', userId: 'p_dev', role: 'admin', status: 'active', muted: false, lastReadAt: iso(400), joinedAt: iso(60 * 24 * 9) },
+  { cabinId: 'cab_scifi', userId: 'p_ari', role: 'member', status: 'active', muted: false, lastReadAt: iso(60 * 12), joinedAt: iso(60 * 24 * 8) },
+  { cabinId: 'cab_scifi', userId: 'p_maya', role: 'member', status: 'active', muted: false, lastReadAt: iso(60 * 12), joinedAt: iso(60 * 24 * 7) },
+  { cabinId: 'cab_food', userId: 'p_zoe', role: 'owner', status: 'active', muted: false, lastReadAt: iso(90), joinedAt: iso(60 * 24 * 6) },
+  { cabinId: 'cab_food', userId: 'p_omar', role: 'member', status: 'active', muted: false, lastReadAt: iso(100), joinedAt: iso(60 * 24 * 6) },
+  { cabinId: 'cab_food', userId: 'p_nina', role: 'member', status: 'active', muted: false, lastReadAt: iso(105), joinedAt: iso(60 * 24 * 5) },
+  { cabinId: 'cab_food', userId: 'p_ari', role: 'member', status: 'active', muted: false, lastReadAt: iso(110), joinedAt: iso(60 * 24 * 5) },
+  { cabinId: 'cab_food', userId: 'p_you', role: 'member', status: 'active', muted: false, lastReadAt: iso(90), joinedAt: iso(60 * 24 * 4) },
+  { cabinId: 'cab_food', userId: 'p_dev', role: 'member', status: 'banned', muted: false, lastReadAt: iso(60 * 24 * 4), joinedAt: iso(60 * 24 * 5) }, // CAB-14 demo: cannot rejoin
+];
+
+const SEED_CABIN_REQUESTS: CabinJoinRequest[] = [
+  { id: 'req_seed_you_hike', cabinId: 'cab_hike', userId: 'p_you', message: 'Hi! I hike every Saturday and would love to join.', status: 'pending', createdAt: iso(45) },
+  { id: 'req_seed_dev_hike', cabinId: 'cab_hike', userId: 'p_dev', message: 'Thru-hiking the PCT next spring — keen to swap routes.', status: 'pending', createdAt: iso(150) },
+  { id: 'req_seed_you_food', cabinId: 'cab_food', userId: 'p_you', message: null, status: 'approved', createdAt: iso(60 * 24 * 4) },
+];
+
+const SEED_CABIN_MESSAGES: CabinMessage[] = [
+  { id: 'cmsg_fe_1', cabinId: 'cab_frontend', senderId: 'p_sam', body: 'Welcome aboard! Shipping the new composer today.', imageUrl: null, replyTo: null, isDeleted: false, createdAt: iso(300) },
+  { id: 'cmsg_fe_2', cabinId: 'cab_frontend', senderId: 'p_omar', body: 'Nice — the virtualized feed is holding up at 10k posts.', imageUrl: null, replyTo: null, isDeleted: false, createdAt: iso(280) },
+  { id: 'cmsg_fe_3', cabinId: 'cab_frontend', senderId: 'p_sam', body: 'Merged. Also added lazy route splitting.', imageUrl: null, replyTo: null, isDeleted: false, createdAt: iso(260) },
+  { id: 'cmsg_fe_4', cabinId: 'cab_frontend', senderId: 'p_you', body: 'Awesome, bundle size looks way better.', imageUrl: null, replyTo: null, isDeleted: false, createdAt: iso(240) },
+  { id: 'cmsg_fe_5', cabinId: 'cab_frontend', senderId: 'p_omar', body: 'Retro at 4pm today — bring the perf numbers.', imageUrl: null, replyTo: null, isDeleted: false, createdAt: iso(90) },
+  { id: 'cmsg_fe_6', cabinId: 'cab_frontend', senderId: 'p_you', body: 'Works for me.', imageUrl: null, replyTo: null, isDeleted: false, createdAt: iso(80) },
+  { id: 'cmsg_fe_7', cabinId: 'cab_frontend', senderId: 'p_omar', body: 'PR #142 needs a second pair of eyes on the RLS policy.', imageUrl: null, replyTo: null, isDeleted: false, createdAt: iso(50) }, // unread for p_you
+  { id: 'cmsg_fe_8', cabinId: 'cab_frontend', senderId: 'p_sam', body: 'I can take it after lunch.', imageUrl: null, replyTo: 'cmsg_fe_7', isDeleted: false, createdAt: iso(35) }, // unread + reply demo (CHT-09)
+  { id: 'cmsg_photo_1', cabinId: 'cab_photo', senderId: 'p_lena', body: 'Golden hour at the pier this Saturday?', imageUrl: null, replyTo: null, isDeleted: false, createdAt: iso(400) },
+  { id: 'cmsg_photo_2', cabinId: 'cab_photo', senderId: 'p_maya', body: 'In! Bringing the 35mm.', imageUrl: null, replyTo: null, isDeleted: false, createdAt: iso(390) },
+  { id: 'cmsg_scifi_1', cabinId: 'cab_scifi', senderId: 'p_nina', body: 'This month: Project Hail Mary. Thoughts so far?', imageUrl: null, replyTo: null, isDeleted: false, createdAt: iso(500) },
+  { id: 'cmsg_scifi_2', cabinId: 'cab_scifi', senderId: 'p_dev', body: 'Chapter 4 had me rewinding the audiobook twice.', imageUrl: null, replyTo: null, isDeleted: false, createdAt: iso(480) },
+  { id: 'cmsg_food_1', cabinId: 'cab_food', senderId: 'p_zoe', body: 'New taco spot on 5th — al pastor is unreal.', imageUrl: null, replyTo: null, isDeleted: false, createdAt: iso(120) },
+  { id: 'cmsg_food_2', cabinId: 'cab_food', senderId: 'p_nina', body: 'Adding to my list!', imageUrl: null, replyTo: null, isDeleted: false, createdAt: iso(110) },
+  { id: 'cmsg_food_3', cabinId: 'cab_food', senderId: 'p_omar', body: null, imageUrl: null, replyTo: null, isDeleted: true, createdAt: iso(100) }, // CHT-08 placeholder
+  { id: 'cmsg_food_4', cabinId: 'cab_food', senderId: 'p_zoe', body: 'Omar deleted that one fast.', imageUrl: null, replyTo: null, isDeleted: false, createdAt: iso(95) },
+];
 
 const SEED_POSTS: Array<{ a: number; body: string; h: number; imgs?: string[] }> = [
   { a: 1, body: 'Spent the morning redesigning an onboarding flow. Friction hides in the tiniest fields — one fewer input can lift completion dramatically. #design #ux', h: 2, imgs: [IMG('Onboarding sketches', '#6366f1', '#ec4899')] },
@@ -316,6 +428,9 @@ function buildSeed(): AppState {
   const notifications: AppNotification[] = [
     { id: uid(), recipientId: 'p_you', actorId: 'p_omar', type: 'follow', entityType: 'user', entityId: 'p_omar', data: {}, isRead: false, createdAt: new Date(Date.now() - 40 * 60_000).toISOString() },
     { id: uid(), recipientId: 'p_you', actorId: 'p_maya', type: 'follow', entityType: 'user', entityId: 'p_maya', data: {}, isRead: false, createdAt: new Date(Date.now() - 3 * HOUR).toISOString() },
+    // G demo: owner sees their pending requests; the requester saw their approval.
+    { id: uid(), recipientId: 'p_lena', actorId: 'p_you', type: 'cabin_join_request', entityType: 'cabin', entityId: 'cab_hike', data: { cabin_id: 'cab_hike' }, isRead: false, createdAt: new Date(Date.now() - 45 * 60_000).toISOString() },
+    { id: uid(), recipientId: 'p_you', actorId: 'p_zoe', type: 'cabin_request_approved', entityType: 'cabin', entityId: 'cab_food', data: { cabin_id: 'cab_food' }, isRead: true, createdAt: new Date(Date.now() - 60 * 24 * 4).toISOString() },
   ];
 
   const stories: Story[] = [
@@ -358,6 +473,11 @@ function buildSeed(): AppState {
     mutedNotifications: [],
     interests: SEED_INTERESTS, // INT-01 (demo copy of the 0007 seed)
     userInterests, // INT-02 — demo personas have picks so INT-07 has matches
+    cabins: SEED_CABINS, // CAB-01/02 (demo copy of the 0008 shapes)
+    cabinInterests: SEED_CABIN_INTERESTS,
+    cabinMembers: SEED_CABIN_MEMBERS,
+    cabinJoinRequests: SEED_CABIN_REQUESTS,
+    cabinMessages: SEED_CABIN_MESSAGES,
     extrasV2: true,
   };
 }
@@ -374,6 +494,12 @@ function migrateV2(state: AppState): AppState {
     // INT-01/02: pre-interest states get the demo catalog + persona picks.
     interests: state.interests ?? SEED_INTERESTS,
     userInterests: state.userInterests ?? SEED_USER_INTERESTS,
+    // G: pre-cabin states get the demo cabins (members/messages included).
+    cabins: state.cabins ?? SEED_CABINS,
+    cabinInterests: state.cabinInterests ?? SEED_CABIN_INTERESTS,
+    cabinMembers: state.cabinMembers ?? SEED_CABIN_MEMBERS,
+    cabinJoinRequests: state.cabinJoinRequests ?? SEED_CABIN_REQUESTS,
+    cabinMessages: state.cabinMessages ?? SEED_CABIN_MESSAGES,
     // v1 rows → v2 shapes (fill fields that didn't exist in v1)
     posts: (state.posts ?? []).map((p) => ({
       ...p,
@@ -507,6 +633,104 @@ export function suggestPeopleByInterests(state: AppState, viewerId: string, limi
     .sort((x, y) => y.overlap - x.overlap || followerCount(state, y.p.id) - followerCount(state, x.p.id))
     .slice(0, limit)
     .map((x) => x.p);
+}
+
+/* --------------------------------------------------------------- cabins (G) */
+
+export function cabinById(state: AppState, id: string): Cabin | null {
+  return (state.cabins ?? []).find((c) => c.id === id) ?? null;
+}
+
+/** My membership row for a cabin (any status — includes 'banned', CAB-14). */
+export function cabinMembershipOf(state: AppState, cabinId: string, userId: string): CabinMember | null {
+  return (state.cabinMembers ?? []).find((m) => m.cabinId === cabinId && m.userId === userId) ?? null;
+}
+
+/** Active members of a cabin (member list is member-only on the server). */
+export function cabinMembersOf(state: AppState, cabinId: string): CabinMember[] {
+  return (state.cabinMembers ?? []).filter((m) => m.cabinId === cabinId && m.status === 'active');
+}
+
+/** CAB-01: interest tags attached to a cabin. */
+export function cabinInterestTagsOf(state: AppState, cabinId: string): Interest[] {
+  const ids = new Set((state.cabinInterests ?? []).filter((ci) => ci.cabinId === cabinId).map((ci) => ci.interestId));
+  return interestCatalog(state).filter((i) => ids.has(i.id));
+}
+
+/** CAB-02/CHT-12: can this user moderate (owner or admin role, active)? */
+export function canModerateCabin(state: AppState, cabinId: string, userId: string | null): boolean {
+  if (!userId) return false;
+  const m = cabinMembershipOf(state, cabinId, userId);
+  return !!m && m.status === 'active' && (m.role === 'owner' || m.role === 'admin');
+}
+
+export function isCabinOwner(state: AppState, cabinId: string, userId: string | null): boolean {
+  if (!userId) return false;
+  const m = cabinMembershipOf(state, cabinId, userId);
+  return !!m && m.status === 'active' && m.role === 'owner';
+}
+
+/** CHT-07: unread = messages after my last_read_at from other active members. */
+export function cabinUnreadCount(state: AppState, cabinId: string, userId: string): number {
+  const me = cabinMembershipOf(state, cabinId, userId);
+  if (!me || me.status !== 'active') return 0;
+  const since = me.lastReadAt;
+  return (state.cabinMessages ?? []).filter(
+    (m) => m.cabinId === cabinId && !m.isDeleted && m.senderId !== userId && m.createdAt > since,
+  ).length;
+}
+
+/** Nav badge: total unread across my cabins (CHT-07). */
+export function totalCabinUnread(state: AppState, userId: string | null): number {
+  if (!userId) return 0;
+  return (state.cabinMembers ?? [])
+    .filter((m) => m.userId === userId && m.status === 'active')
+    .reduce((sum, m) => sum + cabinUnreadCount(state, m.cabinId, userId), 0);
+}
+
+/** CAB-12: pending requests for a cabin (owner/admin view). */
+export function cabinPendingRequests(state: AppState, cabinId: string): CabinJoinRequest[] {
+  return (state.cabinJoinRequests ?? []).filter((r) => r.cabinId === cabinId && r.status === 'pending');
+}
+
+/** My pending request on a cabin, if any (CAB-11/13: one at a time). */
+export function myCabinRequest(state: AppState, cabinId: string, userId: string | null): CabinJoinRequest | null {
+  if (!userId) return null;
+  return (
+    (state.cabinJoinRequests ?? []).find((r) => r.cabinId === cabinId && r.userId === userId && r.status === 'pending') ?? null
+  );
+}
+
+/** CAB-05: my owned / joined counts (client mirrors of the DB triggers). */
+export function ownedCabinCount(state: AppState, userId: string): number {
+  const owned = new Set((state.cabins ?? []).filter((c) => c.ownerId === userId).map((c) => c.id));
+  return owned.size;
+}
+
+export function joinedCabinCount(state: AppState, userId: string): number {
+  return (state.cabinMembers ?? []).filter((m) => m.userId === userId && m.status === 'active').length;
+}
+
+/**
+ * INT-07 (cabin half): cabins ranked by shared-interest overlap, excluding
+ * ones I'm in or was banned from. Open + request cabins both surface (§14 Q4).
+ */
+export function suggestCabinsByInterests(state: AppState, viewerId: string, limit = 3): Cabin[] {
+  const interests = new Set(interestsOf(state, viewerId));
+  if (!interests.size) return [];
+  return (state.cabins ?? [])
+    .filter((c) => {
+      const mine = cabinMembershipOf(state, c.id, viewerId);
+      return !mine; // not a member and not banned (banned rows must not resurface)
+    })
+    .map((c) => ({
+      c,
+      overlap: (state.cabinInterests ?? []).filter((ci) => ci.cabinId === c.id && interests.has(ci.interestId)).length,
+    }))
+    .filter((x) => x.overlap > 0)
+    .sort((x, y) => y.overlap - x.overlap || y.c.memberCount - x.c.memberCount)
+    .slice(0, limit)
+    .map((x) => x.c);
 }
 
 export function currentUserProfile(state: AppState): Profile | null {
@@ -1512,6 +1736,435 @@ export class DemoProvider implements DataProvider {
     return { ok: true };
   }
 
+  /* --- cabins (Workstream G) ---
+   * Each method mirrors a 0008 trigger/function so demo behavior matches the
+   * real backend: limits, bans, roles, rate limits, soft delete. */
+
+  /** Mirror of enforce_cabin_name (CAB-08) — starter reserved list. */
+  private static RESERVED_CABIN_NAMES = new Set([
+    'admin', 'administrator', 'circle', 'official', 'support', 'help', 'root', 'system',
+    'api', 'www', 'moderator', 'staff', 'security', 'billing', 'legal', 'anonymous',
+    'fuck', 'shit', 'bitch', 'asshole', 'bastard', 'nazi', 'hitler', 'rape',
+  ]);
+
+  private validateCabinInput(input: CabinInput, ignoreId?: string): Result {
+    const name = input.name.trim();
+    if (name.length < LIMITS.cabinNameMin || name.length > LIMITS.cabinNameMax) {
+      return { ok: false, error: `Cabin names must be ${LIMITS.cabinNameMin}–${LIMITS.cabinNameMax} characters.` };
+    }
+    if (DemoProvider.RESERVED_CABIN_NAMES.has(name.toLowerCase())) {
+      return { ok: false, error: 'That name is reserved — please pick another.' };
+    }
+    if ((this.state.cabins ?? []).some((c) => c.id !== ignoreId && c.name.toLowerCase() === name.toLowerCase())) {
+      return { ok: false, error: 'A cabin with that name already exists.' };
+    }
+    if (input.description && input.description.length > LIMITS.cabinDescMax) {
+      return { ok: false, error: `Descriptions are capped at ${LIMITS.cabinDescMax} characters.` };
+    }
+    const tags = [...new Set(input.interestIds)];
+    if (tags.length < LIMITS.cabinTagsMin || tags.length > LIMITS.cabinTagsMax) {
+      return { ok: false, error: `Pick ${LIMITS.cabinTagsMin}–${LIMITS.cabinTagsMax} interest tags.` };
+    }
+    const catalog = new Set((this.state.interests ?? []).map((i) => i.id));
+    if (tags.some((id) => !catalog.has(id))) return { ok: false, error: 'Unknown interest tag.' };
+    return { ok: true };
+  }
+
+  createCabin(input: CabinInput): Result & { id?: string } {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const me = this.state.session!.id;
+    if (ownedCabinCount(this.state, me) >= LIMITS.cabinCreateMax) {
+      return { ok: false, error: `You can own at most ${LIMITS.cabinCreateMax} cabins.` };
+    }
+    const valid = this.validateCabinInput(input);
+    if (!valid.ok) return valid;
+    const id = uid();
+    const cabin: Cabin = {
+      id,
+      name: input.name.trim(),
+      description: input.description?.trim() || null,
+      imageUrl: input.imageUrl,
+      type: input.type,
+      ownerId: me,
+      maxMembers: LIMITS.cabinMembersMax,
+      memberCount: 1,
+      createdAt: now(),
+    };
+    this.commit({
+      cabins: [cabin, ...(this.state.cabins ?? [])],
+      cabinInterests: [
+        ...[...new Set(input.interestIds)].map((interestId) => ({ cabinId: id, interestId })),
+        ...(this.state.cabinInterests ?? []),
+      ],
+      // CAB-02: creator becomes owner (server: cabins_after_insert trigger).
+      cabinMembers: [
+        { cabinId: id, userId: me, role: 'owner', status: 'active', muted: false, lastReadAt: now(), joinedAt: now() },
+        ...(this.state.cabinMembers ?? []),
+      ],
+    });
+    return { ok: true, id };
+  }
+
+  updateCabin(cabinId: string, patch: Partial<CabinInput>): Result {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const me = this.state.session!.id;
+    if (!canModerateCabin(this.state, cabinId, me)) return { ok: false, error: 'Only the owner or an admin can edit this cabin.' };
+    const cabin = cabinById(this.state, cabinId);
+    if (!cabin) return { ok: false, error: 'Cabin not found.' };
+    const merged: CabinInput = {
+      name: patch.name ?? cabin.name,
+      description: patch.description !== undefined ? patch.description : cabin.description,
+      imageUrl: patch.imageUrl !== undefined ? patch.imageUrl : cabin.imageUrl,
+      type: patch.type ?? cabin.type,
+      interestIds:
+        patch.interestIds ??
+        (this.state.cabinInterests ?? []).filter((ci) => ci.cabinId === cabinId).map((ci) => ci.interestId),
+    };
+    const valid = this.validateCabinInput(merged, cabinId);
+    if (!valid.ok) return valid;
+    this.commit({
+      cabins: (this.state.cabins ?? []).map((c) =>
+        c.id === cabinId
+          ? { ...c, name: merged.name.trim(), description: merged.description?.trim() || null, imageUrl: merged.imageUrl, type: merged.type }
+          : c,
+      ),
+      cabinInterests:
+        patch.interestIds !== undefined
+          ? [
+              ...[...new Set(patch.interestIds)].map((interestId) => ({ cabinId, interestId })),
+              ...(this.state.cabinInterests ?? []).filter((ci) => ci.cabinId !== cabinId),
+            ]
+          : this.state.cabinInterests,
+    });
+    return { ok: true };
+  }
+
+  deleteCabin(cabinId: string): Result {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const me = this.state.session!.id;
+    const cabin = cabinById(this.state, cabinId);
+    if (!cabin) return { ok: false, error: 'Cabin not found.' };
+    if (cabin.ownerId !== me) return { ok: false, error: 'Only the owner can delete this cabin.' };
+    this.commit({
+      cabins: (this.state.cabins ?? []).filter((c) => c.id !== cabinId),
+      cabinInterests: (this.state.cabinInterests ?? []).filter((ci) => ci.cabinId !== cabinId),
+      cabinMembers: (this.state.cabinMembers ?? []).filter((m) => m.cabinId !== cabinId),
+      cabinJoinRequests: (this.state.cabinJoinRequests ?? []).filter((r) => r.cabinId !== cabinId),
+      cabinMessages: (this.state.cabinMessages ?? []).filter((m) => m.cabinId !== cabinId),
+    });
+    return { ok: true };
+  }
+
+  joinCabin(cabinId: string): Result {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const me = this.state.session!.id;
+    const cabin = cabinById(this.state, cabinId);
+    if (!cabin) return { ok: false, error: 'Cabin not found.' };
+    if (cabin.type !== 'open') return { ok: false, error: 'This cabin requires approval — send a request instead.' };
+    const existing = cabinMembershipOf(this.state, cabinId, me);
+    if (existing?.status === 'banned') return { ok: false, error: 'You were removed from this cabin and cannot rejoin.' };
+    if (existing?.status === 'active') return { ok: false, error: 'You are already in this cabin.' };
+    if (cabin.memberCount >= cabin.maxMembers) return { ok: false, error: 'This cabin is full.' };
+    if (joinedCabinCount(this.state, me) >= LIMITS.cabinJoinMax) {
+      return { ok: false, error: `You can join at most ${LIMITS.cabinJoinMax} cabins.` };
+    }
+    this.commit({
+      cabinMembers: [
+        ...(this.state.cabinMembers ?? []).filter((m) => !(m.cabinId === cabinId && m.userId === me)),
+        { cabinId, userId: me, role: 'member', status: 'active', muted: false, lastReadAt: now(), joinedAt: now() },
+      ],
+      cabins: (this.state.cabins ?? []).map((c) => (c.id === cabinId ? { ...c, memberCount: c.memberCount + 1 } : c)),
+    });
+    return { ok: true };
+  }
+
+  leaveCabin(cabinId: string): Result {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const me = this.state.session!.id;
+    const cabin = cabinById(this.state, cabinId);
+    if (!cabin) return { ok: false, error: 'Cabin not found.' };
+    const mine = cabinMembershipOf(this.state, cabinId, me);
+    if (!mine || mine.status !== 'active') return { ok: false, error: 'You are not in this cabin.' };
+    const active = cabinMembersOf(this.state, cabinId);
+    if (mine.role === 'owner' && active.length > 1) {
+      return { ok: false, error: 'Transfer ownership before leaving this cabin.' };
+    }
+    if (mine.role !== 'owner' && cabin.ownerId === me) {
+      // stale owner_id safety (mirrors DB triggers keeping them in sync)
+      return { ok: false, error: 'Transfer ownership before leaving this cabin.' };
+    }
+    if (active.length === 1 && mine.role === 'owner') {
+      // sole owner leaves → the cabin is retired (server: AFTER DELETE trigger)
+      this.deleteCabin(cabinId);
+      return { ok: true };
+    }
+    this.commit({
+      cabinMembers: (this.state.cabinMembers ?? []).filter((m) => !(m.cabinId === cabinId && m.userId === me)),
+      cabins: (this.state.cabins ?? []).map((c) => (c.id === cabinId ? { ...c, memberCount: Math.max(0, c.memberCount - 1) } : c)),
+    });
+    return { ok: true };
+  }
+
+  requestJoin(cabinId: string, message: string): Result {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const me = this.state.session!.id;
+    const cabin = cabinById(this.state, cabinId);
+    if (!cabin) return { ok: false, error: 'Cabin not found.' };
+    if (cabin.type !== 'request') return { ok: false, error: 'This cabin is open — just join it.' };
+    const existing = cabinMembershipOf(this.state, cabinId, me);
+    if (existing?.status === 'banned') return { ok: false, error: 'You were removed from this cabin and cannot rejoin.' };
+    if (existing?.status === 'active') return { ok: false, error: 'You are already in this cabin.' };
+    if (myCabinRequest(this.state, cabinId, me)) return { ok: false, error: 'You already have a pending request.' };
+    if (message.length > LIMITS.cabinRequestMsgMax) {
+      return { ok: false, error: `Join messages are capped at ${LIMITS.cabinRequestMsgMax} characters.` };
+    }
+    const id = uid();
+    const trimmed = message.trim() || null;
+    // NOT-02 mirror: notify the owner + admins (notify() already skips self/blocks).
+    const admins = cabinMembersOf(this.state, cabinId).filter((m) => m.role === 'owner' || m.role === 'admin');
+    this.commit({
+      cabinJoinRequests: [
+        { id, cabinId, userId: me, message: trimmed, status: 'pending', createdAt: now() },
+        ...(this.state.cabinJoinRequests ?? []),
+      ],
+      notifications: admins
+        .filter((m) => m.userId !== me)
+        .map<AppNotification>((m) => ({
+          id: uid(), recipientId: m.userId, actorId: me, type: 'cabin_join_request', entityType: 'cabin', entityId: cabinId,
+          data: { cabin_id: cabinId }, isRead: false, createdAt: now(),
+        }))
+        .concat(this.state.notifications),
+    });
+    return { ok: true };
+  }
+
+  cancelCabinRequest(requestId: string): Result {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const me = this.state.session!.id;
+    const req = (this.state.cabinJoinRequests ?? []).find((r) => r.id === requestId);
+    if (!req || req.userId !== me) return { ok: false, error: 'Request not found.' };
+    if (req.status !== 'pending') return { ok: false, error: 'This request was already handled.' };
+    this.commit({
+      cabinJoinRequests: (this.state.cabinJoinRequests ?? []).map((r) =>
+        r.id === requestId ? { ...r, status: 'cancelled' } : r,
+      ),
+    });
+    return { ok: true };
+  }
+
+  approveCabinRequest(requestId: string): Result {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const me = this.state.session!.id;
+    const req = (this.state.cabinJoinRequests ?? []).find((r) => r.id === requestId);
+    if (!req) return { ok: false, error: 'Request not found.' };
+    if (req.status !== 'pending') return { ok: false, error: 'This request was already handled.' };
+    if (!canModerateCabin(this.state, req.cabinId, me)) {
+      return { ok: false, error: 'Only the owner or an admin can approve requests.' };
+    }
+    const cabin = cabinById(this.state, req.cabinId);
+    if (cabin && cabin.memberCount >= cabin.maxMembers) return { ok: false, error: 'This cabin is full.' };
+    if (joinedCabinCount(this.state, req.userId) >= LIMITS.cabinJoinMax) {
+      return { ok: false, error: 'That user is already in the maximum number of cabins.' };
+    }
+    this.commit({
+      cabinJoinRequests: (this.state.cabinJoinRequests ?? []).map((r) =>
+        r.id === requestId ? { ...r, status: 'approved' } : r,
+      ),
+      cabinMembers: [
+        ...(this.state.cabinMembers ?? []).filter((m) => !(m.cabinId === req.cabinId && m.userId === req.userId)),
+        { cabinId: req.cabinId, userId: req.userId, role: 'member', status: 'active', muted: false, lastReadAt: now(), joinedAt: now() },
+      ],
+      cabins: (this.state.cabins ?? []).map((c) => (c.id === req.cabinId ? { ...c, memberCount: c.memberCount + 1 } : c)),
+      notifications: req.userId !== me
+        ? [
+            { id: uid(), recipientId: req.userId, actorId: me, type: 'cabin_request_approved' as const, entityType: 'cabin' as const, entityId: req.cabinId, data: { cabin_id: req.cabinId }, isRead: false, createdAt: now() },
+            ...this.state.notifications,
+          ]
+        : this.state.notifications,
+    });
+    return { ok: true };
+  }
+
+  declineCabinRequest(requestId: string): Result {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const me = this.state.session!.id;
+    const req = (this.state.cabinJoinRequests ?? []).find((r) => r.id === requestId);
+    if (!req) return { ok: false, error: 'Request not found.' };
+    if (req.status !== 'pending') return { ok: false, error: 'This request was already handled.' };
+    if (!canModerateCabin(this.state, req.cabinId, me)) {
+      return { ok: false, error: 'Only the owner or an admin can decline requests.' };
+    }
+    this.commit({
+      cabinJoinRequests: (this.state.cabinJoinRequests ?? []).map((r) =>
+        r.id === requestId ? { ...r, status: 'declined' } : r,
+      ),
+      notifications: req.userId !== me
+        ? [
+            { id: uid(), recipientId: req.userId, actorId: me, type: 'cabin_request_declined' as const, entityType: 'cabin' as const, entityId: req.cabinId, data: { cabin_id: req.cabinId }, isRead: false, createdAt: now() },
+            ...this.state.notifications,
+          ]
+        : this.state.notifications,
+    });
+    return { ok: true };
+  }
+
+  sendCabinMessage(cabinId: string, body: string, imageRef: string | null, replyTo: string | null): Result & { id?: string } {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const me = this.state.session!.id;
+    const mine = cabinMembershipOf(this.state, cabinId, me);
+    if (!mine || mine.status !== 'active') return { ok: false, error: 'Join this cabin to send messages.' };
+    const trimmed = body.trim();
+    if (!trimmed && !imageRef) return { ok: false, error: 'Write something or attach an image.' };
+    if (trimmed.length > LIMITS.cabinMessageMax) {
+      return { ok: false, error: `Messages are capped at ${LIMITS.cabinMessageMax} characters.` };
+    }
+    // CHT-11 mirror: 20/minute per user per cabin.
+    const cutoff = Date.now() - 60_000;
+    const recent = (this.state.cabinMessages ?? []).filter(
+      (m) => m.cabinId === cabinId && m.senderId === me && new Date(m.createdAt).getTime() > cutoff,
+    ).length;
+    if (recent >= LIMITS.cabinRatePerMin) {
+      return { ok: false, error: `Slow down — cabins allow ${LIMITS.cabinRatePerMin} messages per minute.` };
+    }
+    const id = uid();
+    this.commit({
+      cabinMessages: [
+        ...(this.state.cabinMessages ?? []),
+        { id, cabinId, senderId: me, body: trimmed || null, imageUrl: imageRef, replyTo, isDeleted: false, createdAt: now() },
+      ],
+      // sending a message is activity: my own row catches up
+      cabinMembers: (this.state.cabinMembers ?? []).map((m) =>
+        m.cabinId === cabinId && m.userId === me ? { ...m, lastReadAt: now() } : m,
+      ),
+    });
+    return { ok: true, id };
+  }
+
+  deleteCabinMessage(messageId: string): Result {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const me = this.state.session!.id;
+    const msg = (this.state.cabinMessages ?? []).find((m) => m.id === messageId);
+    if (!msg) return { ok: false, error: 'Message not found.' };
+    // CHT-12: sender, cabin admin, or platform admin (moderation queue).
+    if (
+      msg.senderId !== me &&
+      !canModerateCabin(this.state, msg.cabinId, me) &&
+      profileById(this.state, me)?.role !== 'admin'
+    ) {
+      return { ok: false, error: 'Only the sender or a cabin admin can delete a message.' };
+    }
+    if (msg.isDeleted) return { ok: false, error: 'This message is already deleted.' };
+    // CHT-08: soft delete; content scrubbed (server trigger nulls body/image).
+    this.commit({
+      cabinMessages: (this.state.cabinMessages ?? []).map((m) =>
+        m.id === messageId ? { ...m, isDeleted: true, body: null, imageUrl: null } : m,
+      ),
+    });
+    return { ok: true };
+  }
+
+  markCabinRead(cabinId: string): Result {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const me = this.state.session!.id;
+    this.commit({
+      cabinMembers: (this.state.cabinMembers ?? []).map((m) =>
+        m.cabinId === cabinId && m.userId === me ? { ...m, lastReadAt: now() } : m,
+      ),
+    });
+    return { ok: true };
+  }
+
+  muteCabin(cabinId: string, muted: boolean): Result {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const me = this.state.session!.id;
+    const mine = cabinMembershipOf(this.state, cabinId, me);
+    if (!mine) return { ok: false, error: 'You are not in this cabin.' };
+    this.commit({
+      cabinMembers: (this.state.cabinMembers ?? []).map((m) =>
+        m.cabinId === cabinId && m.userId === me ? { ...m, muted } : m,
+      ),
+    });
+    return { ok: true };
+  }
+
+  removeCabinMember(cabinId: string, userId: string): Result {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const me = this.state.session!.id;
+    if (!canModerateCabin(this.state, cabinId, me)) {
+      return { ok: false, error: 'Only the owner or an admin can remove members.' };
+    }
+    const target = cabinMembershipOf(this.state, cabinId, userId);
+    if (!target || target.status !== 'active') return { ok: false, error: 'Member not found.' };
+    if (target.role === 'owner') return { ok: false, error: 'The owner cannot be removed — transfer ownership first.' };
+    const cabin = cabinById(this.state, cabinId);
+    this.commit({
+      cabinMembers: (this.state.cabinMembers ?? []).filter((m) => !(m.cabinId === cabinId && m.userId === userId)),
+      cabins: cabin ? (this.state.cabins ?? []).map((c) => (c.id === cabinId ? { ...c, memberCount: Math.max(0, c.memberCount - 1) } : c)) : this.state.cabins,
+    });
+    return { ok: true };
+  }
+
+  banCabinMember(cabinId: string, userId: string): Result {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const me = this.state.session!.id;
+    if (!canModerateCabin(this.state, cabinId, me)) {
+      return { ok: false, error: 'Only the owner or an admin can ban members.' };
+    }
+    const target = cabinMembershipOf(this.state, cabinId, userId);
+    if (!target || target.status !== 'active') return { ok: false, error: 'Member not found.' };
+    if (target.role === 'owner') return { ok: false, error: 'The owner cannot be removed — transfer ownership first.' };
+    const isSelf = userId === me;
+    // ban row stays (CAB-14: blocks rejoin); count only drops for non-self
+    this.commit({
+      cabinMembers: (this.state.cabinMembers ?? []).map((m) =>
+        m.cabinId === cabinId && m.userId === userId ? { ...m, status: 'banned' } : m,
+      ),
+      cabins: (this.state.cabins ?? []).map((c) =>
+        c.id === cabinId && !isSelf ? { ...c, memberCount: Math.max(0, c.memberCount - 1) } : c,
+      ),
+    });
+    return { ok: true };
+  }
+
+  transferCabinOwnership(cabinId: string, userId: string): Result {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const me = this.state.session!.id;
+    if (!isCabinOwner(this.state, cabinId, me)) {
+      return { ok: false, error: 'Only the current owner can transfer ownership.' };
+    }
+    const target = cabinMembershipOf(this.state, cabinId, userId);
+    if (!target || target.status !== 'active') {
+      return { ok: false, error: 'The new owner must be an active member of this cabin.' };
+    }
+    if (userId === me) return { ok: true }; // no-op
+    this.commit({
+      cabinMembers: (this.state.cabinMembers ?? []).map((m) => {
+        if (m.cabinId !== cabinId) return m;
+        if (m.userId === userId) return { ...m, role: 'owner' as const };
+        if (m.userId === me) return { ...m, role: 'admin' as const }; // single-owner: old owner demoted
+        return m;
+      }),
+      cabins: (this.state.cabins ?? []).map((c) => (c.id === cabinId ? { ...c, ownerId: userId } : c)),
+    });
+    return { ok: true };
+  }
+
   /* --- notifications (NOT-1..2) --- */
   markNotificationsRead(): Result {
     const guard = this.requireAuth();
@@ -1689,6 +2342,50 @@ const mapUserInterest = (r: Row): UserInterest => ({
   interestId: rs(r.interest_id),
   createdAt: rAt(r.created_at),
 });
+
+const mapCabin = (r: Row): Cabin => ({
+  id: rs(r.id),
+  name: rs(r.name),
+  description: (r.description as string | null) ?? null,
+  imageUrl: (r.image_url as string | null) ?? null,
+  type: (r.type as Cabin['type']) ?? 'open',
+  ownerId: rs(r.owner_id),
+  maxMembers: (r.max_members as number) ?? 500,
+  memberCount: (r.member_count as number) ?? 0,
+  createdAt: rAt(r.created_at),
+});
+
+const mapCabinInterest = (r: Row): CabinInterest => ({ cabinId: rs(r.cabin_id), interestId: rs(r.interest_id) });
+
+const mapCabinMember = (r: Row): CabinMember => ({
+  cabinId: rs(r.cabin_id),
+  userId: rs(r.user_id),
+  role: (r.role as CabinMember['role']) ?? 'member',
+  status: (r.status as CabinMember['status']) ?? 'active',
+  muted: r.muted === true,
+  lastReadAt: rAt(r.last_read_at),
+  joinedAt: rAt(r.joined_at),
+});
+
+const mapCabinRequest = (r: Row): CabinJoinRequest => ({
+  id: rs(r.id),
+  cabinId: rs(r.cabin_id),
+  userId: rs(r.user_id),
+  message: (r.message as string | null) ?? null,
+  status: (r.status as CabinJoinRequest['status']) ?? 'pending',
+  createdAt: rAt(r.created_at),
+});
+
+const mapCabinMessage = (r: Row): CabinMessage => ({
+  id: rs(r.id),
+  cabinId: rs(r.cabin_id),
+  senderId: rs(r.sender_id),
+  body: (r.body as string | null) ?? null,
+  imageUrl: (r.image_url as string | null) ?? null,
+  replyTo: (r.reply_to as string | null) ?? null,
+  isDeleted: r.is_deleted === true,
+  createdAt: rAt(r.created_at),
+});
 const mapSave = (r: Row): Save => ({ userId: rs(r.user_id), postId: rs(r.post_id), createdAt: rAt(r.created_at) });
 const mapRepost = (r: Row): Repost => ({ userId: rs(r.user_id), postId: rs(r.post_id), createdAt: rAt(r.created_at) });
 const mapBlock = (r: Row): Block => ({
@@ -1802,7 +2499,7 @@ class SupabaseProvider implements DataProvider {
       return (data as Row[]) ?? [];
     };
     try {
-      const [profiles, posts, comments, follows, likes, saves, reposts, blocks, mutes, stories, notifications, reports, conversations, prefs, interestRows, userInterestRows] =
+      const [profiles, posts, comments, follows, likes, saves, reposts, blocks, mutes, stories, notifications, reports, conversations, prefs, interestRows, userInterestRows, cabinRows, cabinInterestRows, cabinMemberRows, cabinRequestRows, cabinMessageRows] =
         await Promise.all([
           rows(sb.from('profiles').select('*').limit(5000)),
           rows(sb.from('posts').select('*').order('created_at', { ascending: false }).limit(1000)),
@@ -1820,6 +2517,11 @@ class SupabaseProvider implements DataProvider {
           rows(sb.from('notification_prefs').select('*').eq('user_id', uid).limit(1)),
           rows(sb.from('interests').select('*').limit(200)), // INT-01
           rows(sb.from('user_interests').select('*').limit(5000)), // INT-02 (pairs are non-sensitive; PRV-04 governs display)
+          rows(sb.from('cabins').select('*').order('created_at', { ascending: false }).limit(1000)), // G
+          rows(sb.from('cabin_interests').select('*').limit(3000)), // G
+          rows(sb.from('cabin_members').select('*').limit(5000)), // G (RLS: my memberships + cabins I'm in)
+          rows(sb.from('cabin_join_requests').select('*').order('created_at', { ascending: false }).limit(500)), // G (RLS: mine + cabins I moderate)
+          rows(sb.from('cabin_messages').select('*').order('created_at', { ascending: false }).limit(1000)), // G (RLS: member-only)
         ]);
       const convIds = conversations.map((c) => rs(c.id));
       const [memberRows, messageRows]: [Row[], Row[]] = convIds.length
@@ -1848,6 +2550,11 @@ class SupabaseProvider implements DataProvider {
         mutes: mutes.map(mapMute),
         interests: interestRows.map(mapInterest), // INT-01
         userInterests: userInterestRows.map(mapUserInterest), // INT-02
+        cabins: cabinRows.map(mapCabin), // G
+        cabinInterests: cabinInterestRows.map(mapCabinInterest),
+        cabinMembers: cabinMemberRows.map(mapCabinMember),
+        cabinJoinRequests: cabinRequestRows.map(mapCabinRequest),
+        cabinMessages: cabinMessageRows.map(mapCabinMessage).reverse(), // oldest → newest (parity with DMs)
         stories: stories.map(mapStory),
         notifications: notifications.map(mapNotif),
         mutedNotifications: (prefs[0]?.muted_types as string[] | undefined) ?? [],
@@ -1876,7 +2583,7 @@ class SupabaseProvider implements DataProvider {
     const uid = this.uid;
     if (!uid) return;
     const ch = this.sb.channel(`rt:${uid}`);
-    for (const table of ['messages', 'likes', 'follows', 'reposts', 'posts', 'comments', 'stories', 'profiles'] as const) {
+    for (const table of ['messages', 'likes', 'follows', 'reposts', 'posts', 'comments', 'stories', 'profiles', 'cabin_messages', 'cabins', 'cabin_members', 'cabin_interests', 'cabin_join_requests'] as const) {
       ch.on('postgres_changes', { event: '*', schema: 'public', table }, () => this.scheduleRefresh());
     }
     // NOT-05: notifications arrive filtered to this user's rows only.
@@ -2761,6 +3468,461 @@ class SupabaseProvider implements DataProvider {
         .eq('conversation_id', conversationId)
         .neq('sender_id', meId)
         .is('read_at', null);
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  /* --- cabins (Workstream G) ---
+   * Optimistic writes mirroring the demo provider; the DB (triggers + RLS)
+   * is authoritative and every failure rolls the snapshot back. */
+
+  async createCabin(input: CabinInput): Promise<Result & { id?: string }> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    const tags = [...new Set(input.interestIds)];
+    if (tags.length < LIMITS.cabinTagsMin || tags.length > LIMITS.cabinTagsMax) {
+      return { ok: false, error: `Pick ${LIMITS.cabinTagsMin}–${LIMITS.cabinTagsMax} interest tags.` };
+    }
+    const before = this.state;
+    try {
+      // CAB-01: cover compressed per D; same post-images bucket.
+      const imageUrl = input.imageUrl ? await uploadRef(input.imageUrl, 'post-images', meId) : null;
+      const id = crypto.randomUUID();
+      this.commit({
+        cabins: [
+          { id, name: input.name.trim(), description: input.description?.trim() || null, imageUrl, type: input.type, ownerId: meId, maxMembers: LIMITS.cabinMembersMax, memberCount: 1, createdAt: now() },
+          ...(this.state.cabins ?? []),
+        ],
+        cabinInterests: [...tags.map((interestId) => ({ cabinId: id, interestId })), ...(this.state.cabinInterests ?? [])],
+        cabinMembers: [
+          { cabinId: id, userId: meId, role: 'owner', status: 'active', muted: false, lastReadAt: now(), joinedAt: now() },
+          ...(this.state.cabinMembers ?? []),
+        ],
+      });
+      const { data, error } = await this.sb
+        .from('cabins')
+        .insert({ id, name: input.name.trim(), description: input.description?.trim() || null, image_url: imageUrl, type: input.type, owner_id: meId })
+        .select('id')
+        .single();
+      if (error) throw error;
+      const cabinId = rs(data.id);
+      if (tags.length) {
+        const { error: tagErr } = await this.sb
+          .from('cabin_interests')
+          .insert(tags.map((interest_id) => ({ cabin_id: cabinId, interest_id })));
+        if (tagErr) throw tagErr;
+      }
+      return { ok: true, id: cabinId };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async updateCabin(cabinId: string, patch: Partial<CabinInput>): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const before = this.state;
+    const cabin = cabinById(this.state, cabinId);
+    if (!cabin) return { ok: false, error: 'Cabin not found.' };
+    const db: Record<string, unknown> = {};
+    let imageUrl = cabin.imageUrl;
+    if (patch.imageUrl !== undefined) {
+      // Fresh picks arrive as data URLs; unchanged covers stay remote URLs.
+      imageUrl = patch.imageUrl;
+      if (patch.imageUrl && patch.imageUrl.startsWith('data:')) {
+        imageUrl = await uploadRef(patch.imageUrl, 'post-images', this.state.session!.id);
+      }
+      db.image_url = imageUrl;
+    }
+    if (patch.name !== undefined) db.name = patch.name.trim();
+    if (patch.description !== undefined) db.description = patch.description?.trim() || null;
+    if (patch.type !== undefined) db.type = patch.type;
+    this.commit({
+      cabins: (this.state.cabins ?? []).map((c) =>
+        c.id === cabinId
+          ? {
+              ...c,
+              name: patch.name !== undefined ? patch.name.trim() : c.name,
+              description: patch.description !== undefined ? patch.description?.trim() || null : c.description,
+              imageUrl,
+              type: patch.type !== undefined ? patch.type : c.type,
+            }
+          : c,
+      ),
+      cabinInterests:
+        patch.interestIds !== undefined
+          ? [
+              ...[...new Set(patch.interestIds)].map((interestId) => ({ cabinId, interestId })),
+              ...(this.state.cabinInterests ?? []).filter((ci) => ci.cabinId !== cabinId),
+            ]
+          : this.state.cabinInterests,
+    });
+    try {
+      if (Object.keys(db).length) {
+        const { error } = await this.sb.from('cabins').update(db).eq('id', cabinId);
+        if (error) throw error;
+      }
+      if (patch.interestIds !== undefined) {
+        const { error: delErr } = await this.sb.from('cabin_interests').delete().eq('cabin_id', cabinId);
+        if (delErr) throw delErr;
+        const tags = [...new Set(patch.interestIds)];
+        if (tags.length) {
+          const { error: tagErr } = await this.sb
+            .from('cabin_interests')
+            .insert(tags.map((interest_id) => ({ cabin_id: cabinId, interest_id })));
+          if (tagErr) throw tagErr;
+        }
+      }
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async deleteCabin(cabinId: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const before = this.state;
+    const cabin = cabinById(this.state, cabinId);
+    if (!cabin) return { ok: false, error: 'Cabin not found.' };
+    this.commit({
+      cabins: (this.state.cabins ?? []).filter((c) => c.id !== cabinId),
+      cabinInterests: (this.state.cabinInterests ?? []).filter((ci) => ci.cabinId !== cabinId),
+      cabinMembers: (this.state.cabinMembers ?? []).filter((m) => m.cabinId !== cabinId),
+      cabinJoinRequests: (this.state.cabinJoinRequests ?? []).filter((r) => r.cabinId !== cabinId),
+      cabinMessages: (this.state.cabinMessages ?? []).filter((m) => m.cabinId !== cabinId),
+    });
+    try {
+      // Storage cleanup is client-side (same pattern as deletePost).
+      if (cabin.imageUrl) await deleteMediaUrls([cabin.imageUrl]).catch(() => undefined);
+      const { error } = await this.sb.from('cabins').delete().eq('id', cabinId); // cascades per FKs
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async joinCabin(cabinId: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    const before = this.state;
+    this.commit({
+      cabinMembers: [
+        ...(this.state.cabinMembers ?? []).filter((m) => !(m.cabinId === cabinId && m.userId === meId)),
+        { cabinId, userId: meId, role: 'member', status: 'active', muted: false, lastReadAt: now(), joinedAt: now() },
+      ],
+      cabins: (this.state.cabins ?? []).map((c) => (c.id === cabinId ? { ...c, memberCount: c.memberCount + 1 } : c)),
+    });
+    try {
+      const { error } = await this.sb.rpc('join_cabin', { p_cabin: cabinId });
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async leaveCabin(cabinId: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    const before = this.state;
+    const cabin = cabinById(this.state, cabinId);
+    const soleOwner = cabin?.ownerId === meId && cabinMembersOf(this.state, cabinId).length === 1;
+    if (soleOwner) {
+      // Sole-owner leave retires the cabin (server AFTER DELETE trigger).
+      return this.deleteCabin(cabinId);
+    }
+    this.commit({
+      cabinMembers: (this.state.cabinMembers ?? []).filter((m) => !(m.cabinId === cabinId && m.userId === meId)),
+      cabins: (this.state.cabins ?? []).map((c) => (c.id === cabinId ? { ...c, memberCount: Math.max(0, c.memberCount - 1) } : c)),
+    });
+    try {
+      const { error } = await this.sb.from('cabin_members').delete().eq('cabin_id', cabinId).eq('user_id', meId);
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async requestJoin(cabinId: string, message: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    if (message.length > LIMITS.cabinRequestMsgMax) {
+      return { ok: false, error: `Join messages are capped at ${LIMITS.cabinRequestMsgMax} characters.` };
+    }
+    const before = this.state;
+    const id = crypto.randomUUID();
+    this.commit({
+      cabinJoinRequests: [
+        { id, cabinId, userId: meId, message: message.trim() || null, status: 'pending', createdAt: now() },
+        ...(this.state.cabinJoinRequests ?? []),
+      ],
+    });
+    try {
+      // notify(owner+admins) happens in the DB insert trigger (0008).
+      const { error } = await this.sb
+        .from('cabin_join_requests')
+        .insert({ id, cabin_id: cabinId, user_id: meId, message: message.trim() || null });
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async cancelCabinRequest(requestId: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const before = this.state;
+    this.commit({
+      cabinJoinRequests: (this.state.cabinJoinRequests ?? []).map((r) =>
+        r.id === requestId ? { ...r, status: 'cancelled' } : r,
+      ),
+    });
+    try {
+      const { error } = await this.sb.from('cabin_join_requests').delete().eq('id', requestId); // cancel = remove
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async approveCabinRequest(requestId: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const req = (this.state.cabinJoinRequests ?? []).find((r) => r.id === requestId);
+    if (!req) return { ok: false, error: 'Request not found.' };
+    const before = this.state;
+    this.commit({
+      cabinJoinRequests: (this.state.cabinJoinRequests ?? []).map((r) =>
+        r.id === requestId ? { ...r, status: 'approved' } : r,
+      ),
+      cabinMembers: [
+        ...(this.state.cabinMembers ?? []).filter((m) => !(m.cabinId === req.cabinId && m.userId === req.userId)),
+        { cabinId: req.cabinId, userId: req.userId, role: 'member', status: 'active', muted: false, lastReadAt: now(), joinedAt: now() },
+      ],
+      cabins: (this.state.cabins ?? []).map((c) => (c.id === req.cabinId ? { ...c, memberCount: c.memberCount + 1 } : c)),
+    });
+    try {
+      // security-definer function: membership insert + status + notify (0008).
+      const { error } = await this.sb.rpc('approve_join_request', { p_request: requestId });
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async declineCabinRequest(requestId: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const before = this.state;
+    this.commit({
+      cabinJoinRequests: (this.state.cabinJoinRequests ?? []).map((r) =>
+        r.id === requestId ? { ...r, status: 'declined' } : r,
+      ),
+    });
+    try {
+      // notify(requester) happens in the DB update trigger (0008).
+      const { error } = await this.sb.from('cabin_join_requests').update({ status: 'declined' }).eq('id', requestId);
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async sendCabinMessage(cabinId: string, body: string, imageRef: string | null, replyTo: string | null): Promise<Result & { id?: string }> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    const trimmed = body.trim();
+    if (trimmed.length > LIMITS.cabinMessageMax) {
+      return { ok: false, error: `Messages are capped at ${LIMITS.cabinMessageMax} characters.` };
+    }
+    const before = this.state;
+    try {
+      // CHT-03: images only (no video) — same post-images bucket + D pipeline.
+      const imageUrl = imageRef ? await uploadRef(imageRef, 'post-images', meId) : null;
+      const id = crypto.randomUUID();
+      this.commit({
+        cabinMessages: [
+          ...(this.state.cabinMessages ?? []),
+          { id, cabinId, senderId: meId, body: trimmed || null, imageUrl, replyTo, isDeleted: false, createdAt: now() },
+        ],
+        cabinMembers: (this.state.cabinMembers ?? []).map((m) =>
+          m.cabinId === cabinId && m.userId === meId ? { ...m, lastReadAt: now() } : m,
+        ),
+      });
+      const { error } = await this.sb
+        .from('cabin_messages')
+        .insert({ id, cabin_id: cabinId, sender_id: meId, body: trimmed || null, image_url: imageUrl, reply_to: replyTo });
+      if (error) throw error;
+      return { ok: true, id };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async deleteCabinMessage(messageId: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const before = this.state;
+    this.commit({
+      cabinMessages: (this.state.cabinMessages ?? []).map((m) =>
+        m.id === messageId ? { ...m, isDeleted: true, body: null, imageUrl: null } : m,
+      ),
+    });
+    try {
+      const { error } = await this.sb.from('cabin_messages').update({ is_deleted: true }).eq('id', messageId);
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async markCabinRead(cabinId: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    this.commit({
+      cabinMembers: (this.state.cabinMembers ?? []).map((m) =>
+        m.cabinId === cabinId && m.userId === meId ? { ...m, lastReadAt: now() } : m,
+      ),
+    });
+    try {
+      const { error } = await this.sb
+        .from('cabin_members')
+        .update({ last_read_at: now() })
+        .eq('cabin_id', cabinId)
+        .eq('user_id', meId);
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async muteCabin(cabinId: string, muted: boolean): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    this.commit({
+      cabinMembers: (this.state.cabinMembers ?? []).map((m) =>
+        m.cabinId === cabinId && m.userId === meId ? { ...m, muted } : m,
+      ),
+    });
+    try {
+      const { error } = await this.sb
+        .from('cabin_members')
+        .update({ muted })
+        .eq('cabin_id', cabinId)
+        .eq('user_id', meId);
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async removeCabinMember(cabinId: string, userId: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const before = this.state;
+    const cabin = cabinById(this.state, cabinId);
+    this.commit({
+      cabinMembers: (this.state.cabinMembers ?? []).filter((m) => !(m.cabinId === cabinId && m.userId === userId)),
+      cabins: cabin ? (this.state.cabins ?? []).map((c) => (c.id === cabinId ? { ...c, memberCount: Math.max(0, c.memberCount - 1) } : c)) : this.state.cabins,
+    });
+    try {
+      // RLS + BEFORE DELETE trigger: only owner/admin, never the owner row.
+      const { error } = await this.sb.from('cabin_members').delete().eq('cabin_id', cabinId).eq('user_id', userId);
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async banCabinMember(cabinId: string, userId: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const before = this.state;
+    this.commit({
+      cabinMembers: (this.state.cabinMembers ?? []).map((m) =>
+        m.cabinId === cabinId && m.userId === userId ? { ...m, status: 'banned' } : m,
+      ),
+      cabins: (this.state.cabins ?? []).map((c) =>
+        c.id === cabinId && c.ownerId !== userId ? { ...c, memberCount: Math.max(0, c.memberCount - 1) } : c,
+      ),
+    });
+    try {
+      // RLS + BEFORE UPDATE trigger: only owner/admin, never the owner row.
+      const { error } = await this.sb.from('cabin_members').update({ status: 'banned' }).eq('cabin_id', cabinId).eq('user_id', userId);
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before;
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async transferCabinOwnership(cabinId: string, userId: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const meId = this.state.session!.id;
+    const before = this.state;
+    this.commit({
+      cabinMembers: (this.state.cabinMembers ?? []).map((m) => {
+        if (m.cabinId !== cabinId) return m;
+        if (m.userId === userId) return { ...m, role: 'owner' as const };
+        if (m.userId === meId) return { ...m, role: 'admin' as const };
+        return m;
+      }),
+      cabins: (this.state.cabins ?? []).map((c) => (c.id === cabinId ? { ...c, ownerId: userId } : c)),
+    });
+    try {
+      // security-definer: role swap (single-owner trigger demotes old owner)
+      // + cabins.owner_id update, atomically (0008).
+      const { error } = await this.sb.rpc('transfer_cabin_ownership', { p_cabin: cabinId, p_new_owner: userId });
       if (error) throw error;
       return { ok: true };
     } catch (e) {

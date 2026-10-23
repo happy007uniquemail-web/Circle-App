@@ -16,6 +16,9 @@ const PrivacySettings = lazy(() => import('./pages/PrivacySettings'));
 const AdminReports = lazy(() => import('./pages/AdminReports'));
 const Messages = lazy(() => import('./pages/Messages'));
 const MessageThread = lazy(() => import('./pages/MessageThread'));
+const Cabins = lazy(() => import('./pages/Cabins'));
+const CabinDetail = lazy(() => import('./pages/CabinDetail'));
+const CabinForm = lazy(() => import('./pages/CabinForm'));
 const Hashtag = lazy(() => import('./pages/Hashtag'));
 const Saved = lazy(() => import('./pages/Saved'));
 const Terms = lazy(() => import('./pages/Terms'));
@@ -45,6 +48,10 @@ export default function App() {
         <Route path="/notifications" element={<Suspense fallback={<RouteFallback />}><Notifications /></Suspense>} />
         <Route path="/messages" element={<Suspense fallback={<RouteFallback />}><Messages /></Suspense>} />
         <Route path="/messages/:id" element={<Suspense fallback={<RouteFallback />}><MessageThread /></Suspense>} />
+        <Route path="/cabins" element={<Suspense fallback={<RouteFallback />}><Cabins /></Suspense>} />
+        <Route path="/cabins/new" element={<Suspense fallback={<RouteFallback />}><CabinForm /></Suspense>} />
+        <Route path="/cabins/:id" element={<Suspense fallback={<RouteFallback />}><CabinDetail /></Suspense>} />
+        <Route path="/cabins/:id/edit" element={<Suspense fallback={<RouteFallback />}><CabinForm /></Suspense>} />
         <Route path="/hashtag/:tag" element={<Suspense fallback={<RouteFallback />}><Hashtag /></Suspense>} />
         <Route path="/saved" element={<Suspense fallback={<RouteFallback />}><Saved /></Suspense>} />
         <Route path="/settings" element={<Suspense fallback={<RouteFallback />}><Settings /></Suspense>} />

@@ -19,6 +19,7 @@ const ICONS: Record<string, { Icon: typeof Heart; cls: string }> = {
   follow_request_approved: { Icon: UserCheck, cls: 'bg-emerald-50 text-emerald-600' },
   cabin_join_request: { Icon: HandHeart, cls: 'bg-orange-50 text-orange-600' },
   cabin_request_approved: { Icon: HandHeart, cls: 'bg-emerald-50 text-emerald-600' },
+  cabin_request_declined: { Icon: HandHeart, cls: 'bg-red-50 text-red-600' },
   cabin_invite: { Icon: HandHeart, cls: 'bg-purple-50 text-purple-600' },
 };
 
@@ -42,6 +43,8 @@ function describe(type: string): string {
       return 'requested to join your cabin';
     case 'cabin_request_approved':
       return 'approved your cabin request';
+    case 'cabin_request_declined':
+      return 'declined your cabin request';
     case 'cabin_invite':
       return 'invited you to a cabin';
     default:

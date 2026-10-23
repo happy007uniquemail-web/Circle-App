@@ -31,6 +31,7 @@ export default function AdminReports() {
   async function removeContent(report: Report) {
     if (report.targetType === 'post') await actions.deletePost(report.targetId);
     else if (report.targetType === 'comment') await actions.deleteComment(report.targetId);
+    else if (report.targetType === 'cabin_message') await actions.deleteCabinMessage(report.targetId); // CHT-12
     else return;
     await resolve(report.id, 'actioned');
     toast('Content removed.', 'success');
@@ -41,6 +42,9 @@ export default function AdminReports() {
     let targetId = report.targetId;
     if (report.targetType === 'post') targetId = state.posts.find((p) => p.id === report.targetId)?.authorId ?? '';
     if (report.targetType === 'comment') targetId = state.comments.find((c) => c.id === report.targetId)?.authorId ?? '';
+  // CHT-12: suspend the message author or the cabin owner.
+  if (report.targetType === 'cabin_message') targetId = (state.cabinMessages ?? []).find((m) => m.id === report.targetId)?.senderId ?? '';
+  if (report.targetType === 'cabin') targetId = (state.cabins ?? []).find((c) => c.id === report.targetId)?.ownerId ?? '';
     const target = profileById(state, targetId);
     if (!target) return;
     const r = await actions.setSuspended(target.id, !target.isSuspended);
@@ -67,6 +71,35 @@ export default function AdminReports() {
         <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm backdrop-blur-md">
           <Link to={`/p/${comment.postId}`} className="line-clamp-2 font-medium text-slate-700 hover:underline">“{comment.body}”</Link>
           <span className="text-xs text-slate-500">by {author ? `@${author.username}` : 'unknown'}</span>
+        </div>
+      );
+    }
+    // CHT-12: cabin message / cabin previews.
+    if (report.targetType === 'cabin_message') {
+      const msg = (state.cabinMessages ?? []).find((m) => m.id === report.targetId);
+      if (!msg || msg.isDeleted) return <span className="text-sm italic text-slate-400">Message already removed</span>;
+      const author = profileById(state, msg.senderId);
+      return (
+        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm backdrop-blur-md">
+          <Link to={`/cabins/${msg.cabinId}`} className="line-clamp-2 font-medium text-slate-700 hover:underline">
+            {msg.body ?? 'Photo'}
+          </Link>
+          <span className="text-xs text-slate-500">by {author ? `@${author.username}` : 'unknown'} · in a cabin chat</span>
+        </div>
+      );
+    }
+    if (report.targetType === 'cabin') {
+      const cabin = (state.cabins ?? []).find((c) => c.id === report.targetId);
+      if (!cabin) return <span className="text-sm italic text-slate-400">Cabin already deleted</span>;
+      const owner = profileById(state, cabin.ownerId);
+      return (
+        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm backdrop-blur-md">
+          <Link to={`/cabins/${cabin.id}`} className="font-medium text-slate-700 hover:underline">
+            {cabin.name} <span className="text-slate-500">({cabin.type})</span>
+          </Link>
+          <div className="mt-0.5 text-xs text-slate-500">
+            {cabin.description ?? 'No description'} · owner {owner ? `@${owner.username}` : 'unknown'}
+          </div>
         </div>
       );
     }
@@ -156,7 +189,7 @@ export default function AdminReports() {
                     <button onClick={() => void resolve(r.id, 'dismissed')} className="btn-ghost border border-white/15 bg-white/[0.05] text-xs">
                       <CheckCircle2 size={14} /> Dismiss
                     </button>
-                    {r.targetType !== 'user' && (
+                    {r.targetType !== 'user' && r.targetType !== 'cabin' && (
                       <button onClick={() => void removeContent(r)} className="btn-ghost border border-red-200 text-xs text-red-600 hover:bg-red-50">
                         <Trash2 size={14} /> Remove content
                       </button>

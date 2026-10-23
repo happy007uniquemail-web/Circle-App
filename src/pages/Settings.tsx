@@ -15,7 +15,7 @@ const NOTIF_CATEGORIES: ReadonlyArray<{ types: string[]; label: string; hint: st
   { types: ['comment', 'mention'], label: 'Comments & mentions', hint: 'Comments and @mentions on your posts' },
   { types: ['follow'], label: 'Follows', hint: 'New followers and follow requests' },
   { types: ['repost'], label: 'Reposts', hint: 'When someone reposts your post' },
-  { types: ['cabin_invite', 'cabin_join_request', 'cabin_request_approved'], label: 'Cabins', hint: 'Cabin invites, join requests, and approvals' },
+  { types: ['cabin_invite', 'cabin_join_request', 'cabin_request_approved', 'cabin_request_declined'], label: 'Cabins', hint: 'Cabin invites, join requests, approvals, and declines' },
 ];
 
 /** `/settings` — edit profile, manage blocks, sign out, delete account (PROF-2, MOD-3, AUTH-6). */

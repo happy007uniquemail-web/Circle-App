@@ -8,6 +8,7 @@ import {
   Search,
   Settings,
   Shield,
+  Tent,
   User as UserIcon,
 } from 'lucide-react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
@@ -17,7 +18,7 @@ import NotificationBell from './NotificationBell';
 import SidePanel from './SidePanel';
 import { Toaster, toast } from './Toast';
 import { useOnlineStatus } from '../lib/hooks';
-import { currentUserProfile, unreadConversationCount, unreadCount, useActions, useAppState } from '../lib/store';
+import { currentUserProfile, totalCabinUnread, unreadConversationCount, unreadCount, useActions, useAppState } from '../lib/store';
 
 function Brand() {
   return (
@@ -61,6 +62,7 @@ export default function Layout() {
   if (!state.session || !me) return null;
   const dmUnread = unreadConversationCount(state, me.id);
   const notifUnread = unreadCount(state, me.id);
+  const cabinUnread = totalCabinUnread(state, me.id); // CHT-07 nav badge
 
   function onSearch(e: FormEvent) {
     e.preventDefault();
@@ -75,6 +77,7 @@ export default function Layout() {
   const tabs = [
     { to: '/home', icon: Home, label: 'Home' },
     { to: '/explore', icon: Compass, label: 'Explore' },
+    { to: '/cabins', icon: Tent, label: 'Cabins', badge: cabinUnread },
     { to: '/messages', icon: MessageCircle, label: 'Chats', badge: dmUnread },
     { to: '/notifications', icon: Shield, label: 'Alerts', badge: notifUnread },
   ];
@@ -82,6 +85,7 @@ export default function Layout() {
   const sideNav = [
     { to: '/home', icon: Home, label: 'Home' },
     { to: '/explore', icon: Compass, label: 'Explore' },
+    { to: '/cabins', icon: Tent, label: 'Cabins', badge: cabinUnread },
     { to: '/messages', icon: MessageCircle, label: 'Messages', badge: dmUnread },
     { to: '/notifications', icon: Shield, label: 'Notifications', badge: notifUnread },
     { to: '/saved', icon: Bookmark, label: 'Saved' },
@@ -223,7 +227,7 @@ export default function Layout() {
       {/* Mobile tab bar (responsive 360px → desktop, §8) */}
       <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-white/10 bg-glass shadow-lg shadow-black/50 backdrop-blur-2xl md:hidden" aria-label="Primary">
         {tabs.map(({ to, icon: Icon, label, badge }) => {
-          const count = to === '/messages' ? dmUnread : to === '/notifications' ? notifUnread : 0;
+          const count = to === '/messages' ? dmUnread : to === '/notifications' ? notifUnread : to === '/cabins' ? cabinUnread : 0;
           return (
             <NavLink
               key={to}

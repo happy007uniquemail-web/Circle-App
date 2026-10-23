@@ -12,8 +12,9 @@ export type NotifType =
   | 'follow_request_approved'
   | 'cabin_join_request'
   | 'cabin_request_approved'
+  | 'cabin_request_declined'
   | 'cabin_invite';
-export type ReportTarget = 'post' | 'comment' | 'user';
+export type ReportTarget = 'post' | 'comment' | 'user' | 'cabin' | 'cabin_message'; // CHT-12: cabin reporting
 export type ReportReason = 'spam' | 'harassment' | 'hate' | 'nsfw' | 'other';
 export type ReportStatus = 'open' | 'dismissed' | 'actioned';
 export type MediaKind = 'image' | 'video';
@@ -198,6 +199,70 @@ export interface Message {
   readAt: string | null;
 }
 
+/* -------------------------------------------------- cabins (Workstream G) */
+
+export type CabinType = 'open' | 'request';
+export type CabinRole = 'owner' | 'admin' | 'member';
+export type CabinMemberStatus = 'active' | 'banned';
+export type CabinRequestStatus = 'pending' | 'approved' | 'declined' | 'cancelled';
+
+/** CAB-01/02: interest-based group room; owner/admin/member roles. */
+export interface Cabin {
+  id: string;
+  name: string;
+  description: string | null;
+  imageUrl: string | null; // compressed per D
+  type: CabinType; // open | request (invite-only = phase 2)
+  ownerId: string;
+  maxMembers: number; // default 500
+  memberCount: number; // trigger-maintained; discovery-safe
+  createdAt: string;
+}
+
+export interface CabinInterest {
+  cabinId: string;
+  interestId: string;
+}
+
+export interface CabinMember {
+  cabinId: string;
+  userId: string;
+  role: CabinRole;
+  status: CabinMemberStatus;
+  muted: boolean;
+  lastReadAt: string; // CHT-07 unread tracking
+  joinedAt: string;
+}
+
+export interface CabinJoinRequest {
+  id: string;
+  cabinId: string;
+  userId: string;
+  message: string | null; // ≤200 (CAB-11)
+  status: CabinRequestStatus;
+  createdAt: string;
+}
+
+export interface CabinMessage {
+  id: string;
+  cabinId: string;
+  senderId: string;
+  body: string | null; // ≤2000 (CHT-04); null after soft delete
+  imageUrl: string | null; // CHT-03: images only, no video
+  replyTo: string | null; // CHT-09
+  isDeleted: boolean; // CHT-08 placeholder
+  createdAt: string;
+}
+
+/** Payload for create/edit cabin forms (CAB-01). */
+export interface CabinInput {
+  name: string;
+  description: string | null;
+  imageUrl: string | null;
+  type: CabinType;
+  interestIds: string[]; // 1–3 required
+}
+
 /** Anything rendered in a timeline: a post, optionally stamped by a reposter. */
 export interface FeedItem {
   post: Post;
@@ -222,6 +287,12 @@ export interface AppState {
   interests?: Interest[];
   /** INT-02: everyone's interest picks (needed to match people, INT-07). */
   userInterests?: UserInterest[];
+  /** CAB-02: cabins the viewer can discover; members/messages hydrate on demand. */
+  cabins?: Cabin[];
+  cabinInterests?: CabinInterest[];
+  cabinMembers?: CabinMember[];
+  cabinJoinRequests?: CabinJoinRequest[];
+  cabinMessages?: CabinMessage[];
   stories: Story[];
   notifications: AppNotification[];
   /** Muted notification types for the signed-in user (NOT-09). */

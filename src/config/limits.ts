@@ -29,6 +29,23 @@ export const LIMITS = {
   /** Hard maximum; enforced server-side by user_interests_limit (0007). */
   interestsMax: 10, // INTERESTS_MAX
 
+  /* --- cabins (TRD section 9 / CAB-01, CAB-05, CHT-04, CHT-11) --- */
+  /** Owned-cabin cap (CAB-05); server: enforce_cabin_create_limit (0008). */
+  cabinCreateMax: 5,
+  /** Joined-cabin cap incl. owned (CAB-05); server: enforce_cabin_member_limits. */
+  cabinJoinMax: 50,
+  /** Default member cap per cabin (CAB-05, column default 500). */
+  cabinMembersMax: 500,
+  cabinNameMin: 3,
+  cabinNameMax: 40, // CAB-01
+  cabinDescMax: 300, // CAB-01
+  cabinTagsMin: 1,
+  cabinTagsMax: 3, // CAB-01 (server: enforce_cabin_interest_count)
+  cabinRequestMsgMax: 200, // CAB-11 (server: enforce_join_request_insert)
+  cabinMessageMax: 2000, // CHT-04 (server: check constraint)
+  /** CHT-11 rate limit; server: enforce_cabin_message_rate (20/min). */
+  cabinRatePerMin: 20,
+
   /* ── images (TRD §6.6) ──────────────────────────────────────────────── */
   /** Largest selectable file before compression (IMG-01). */
   imageMaxBytes: 10 * 1024 * 1024, // IMAGE_MAX_PRE_COMPRESS_MB = 10
