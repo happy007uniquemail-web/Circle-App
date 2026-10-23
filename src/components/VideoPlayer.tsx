@@ -37,7 +37,7 @@ export default function VideoPlayer({ refKey, className = '', poster = true, dow
 
   if (failed) {
     return (
-      <div className={`grid place-items-center rounded-xl border border-white/10 bg-white/[0.04] p-6 text-sm text-slate-500 backdrop-blur-md ${className}`}>
+      <div className={`grid place-items-center rounded-xl border border-border-subtle bg-glass-strong p-6 text-sm text-txt-muted backdrop-blur-md ${className}`}>
         <Video size={22} className="mb-1" /> Video unavailable
       </div>
     );
@@ -54,7 +54,7 @@ export default function VideoPlayer({ refKey, className = '', poster = true, dow
         preload="metadata"
         playsInline
         aria-label={label}
-        className={`${width} rounded-xl border border-white/10 bg-black ${className}`}
+        className={`${width} rounded-xl border border-border-subtle bg-black ${className}`}
       />
       {downloadable && (
         <button

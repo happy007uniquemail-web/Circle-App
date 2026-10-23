@@ -4,7 +4,7 @@ function Block({ className = '' }: { className?: string }) {
   return (
     <div
       aria-hidden
-      className={`animate-pulse rounded-xl bg-white/[0.06] ${className}`}
+      className={`animate-pulse rounded-xl bg-hover-wash ${className}`}
     />
   );
 }

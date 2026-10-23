@@ -239,7 +239,7 @@ export function StoryComposer({ onClose }: { onClose: () => void }) {
             <button
               key={k}
               onClick={() => { setKind(k); if (k === 'text') setMedia(null); else setMedia(null); }}
-              className={`flex-1 rounded-xl border px-2 py-2 text-xs font-semibold capitalize transition ${kind === k ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-white/15 text-slate-500 hover:border-white/40'}`}
+              className={`flex-1 rounded-xl border px-2 py-2 text-xs font-semibold capitalize transition ${kind === k ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-border-subtle text-txt-subtle hover:border-brand-400'}`}
             >
               {k === 'text' ? 'Aa Text' : k === 'image' ? '📷 Photo' : '🎬 Video'}
             </button>
@@ -355,7 +355,7 @@ export default function StoryBar() {
           className="flex w-16 shrink-0 flex-col items-center gap-1"
           aria-label="Add to your story"
         >
-          <span className="grid h-[54px] w-[54px] place-items-center rounded-full border-2 border-dashed border-white/20 text-slate-400 hover:border-brand-500 hover:text-brand-600 hover:bg-white/[0.06]">
+          <span className="grid h-[54px] w-[54px] place-items-center rounded-full border-2 border-dashed border-border-subtle text-txt-subtle hover:border-brand-400 hover:text-txt-main hover:bg-hover-wash">
             <Plus size={20} />
           </span>
           <span className="text-[10px] text-slate-500">Add</span>

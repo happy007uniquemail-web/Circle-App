@@ -79,7 +79,7 @@ export default function RightDrawer({ open, onClose }: { open: boolean; onClose:
             type="button"
             aria-label="Close discover panel"
             onClick={onClose}
-            className="tap44 rounded-full p-2 text-txt-muted transition hover:bg-hover-wash hover:text-txt-main"
+            className="btn-icon absolute right-2 top-2 z-10"
           >
             <X size={18} aria-hidden />
           </button>

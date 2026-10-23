@@ -41,8 +41,13 @@ export function useDialogA11y(panelRef: RefObject<HTMLElement | null>, onClose: 
       }
     }
     document.addEventListener('keydown', onKey, true);
+    // MOD-01 scroll lock: background can't scroll behind the dialog. Saved and
+    // restored per-dialog so stacked dialogs unwind in the right order.
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKey, true);
+      document.body.style.overflow = prevOverflow;
       prev?.focus?.();
     };
   }, [panelRef]);
@@ -78,7 +83,7 @@ export default function Modal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 grid place-items-center bg-scrim p-4 backdrop-blur-sm"
       onMouseDown={dismissOnBackdrop ? onClose : undefined}
     >
       <div
@@ -88,14 +93,14 @@ export default function Modal({
         aria-label={label}
         tabIndex={-1}
         onMouseDown={(e) => e.stopPropagation()}
-        className={`relative w-full rounded-2xl border border-white/10 bg-slate-100 shadow-2xl shadow-black/60 focus:outline-none ${className}`}
+        className={`relative w-full rounded-2xl border border-glass-border bg-glass-strong shadow-2xl shadow-black/60 backdrop-blur-2xl focus:outline-none ${className}`}
       >
         {showClose && (
           <button
             type="button"
             aria-label="Close"
             onClick={onClose}
-            className="tap44 absolute right-2 top-2 z-10 rounded-full p-2 text-slate-500 transition hover:bg-white/10 hover:text-slate-800"
+            className="tap44 absolute right-2 top-2 z-10 rounded-full p-2 text-txt-muted transition hover:bg-hover-wash hover:text-txt-main"
           >
             <X size={18} />
           </button>

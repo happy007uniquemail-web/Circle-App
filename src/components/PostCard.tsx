@@ -161,16 +161,16 @@ const PostCard = ({ item, onChange }: { item: FeedItem; onChange?: () => void })
             <MoreHorizontal size={18} />
           </summary>
           <div className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-xl glass py-1">
-            <button onClick={copyLink} className="flex min-h-11 w-full items-center gap-2 px-3.5 py-2 text-sm hover:bg-white/[0.06]">
+            <button onClick={copyLink} className="flex min-h-11 w-full items-center gap-2 px-3.5 py-2 text-sm hover:bg-hover-wash">
               <Download size={14} /> Copy link
             </button>
             {(post.imageUrls.length > 0 || post.videoUrl) && (
-              <button onClick={() => void downloadPostMedia(post)} className="flex min-h-11 w-full items-center gap-2 px-3.5 py-2 text-sm hover:bg-white/[0.06]">
+              <button onClick={() => void downloadPostMedia(post)} className="flex min-h-11 w-full items-center gap-2 px-3.5 py-2 text-sm hover:bg-hover-wash">
                 <Download size={14} /> Save media to device
               </button>
             )}
             {isMine && (
-              <button onClick={() => setEditing(true)} className="flex min-h-11 w-full items-center gap-2 px-3.5 py-2 text-sm hover:bg-white/[0.06]">
+              <button onClick={() => setEditing(true)} className="flex min-h-11 w-full items-center gap-2 px-3.5 py-2 text-sm hover:bg-hover-wash">
                 <Pencil size={14} /> Edit post
               </button>
             )}
@@ -180,7 +180,7 @@ const PostCard = ({ item, onChange }: { item: FeedItem; onChange?: () => void })
               </button>
             )}
             {!isMine && (
-              <button onClick={() => setReporting(true)} className="flex min-h-11 w-full items-center gap-2 px-3.5 py-2 text-sm hover:bg-white/[0.06]">
+              <button onClick={() => setReporting(true)} className="flex min-h-11 w-full items-center gap-2 px-3.5 py-2 text-sm hover:bg-hover-wash">
                 <Flag size={14} /> Report post
               </button>
             )}
@@ -212,7 +212,7 @@ const PostCard = ({ item, onChange }: { item: FeedItem; onChange?: () => void })
               decoding="async"
               width={1600}
               height={1200}
-              className={`aspect-[4/3] w-full rounded-xl border border-white/10 object-cover ${post.imageUrls.length === 1 ? 'max-h-96' : ''} ${
+              className={`aspect-[4/3] w-full rounded-xl border border-border-subtle object-cover ${post.imageUrls.length === 1 ? 'max-h-96' : ''} ${
                 post.imageUrls.length === 3 && i === 0 ? 'col-span-2' : ''
               }`}
             />

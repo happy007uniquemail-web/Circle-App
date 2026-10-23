@@ -45,6 +45,17 @@
   --color-input-bg-focus: var(--input-bg-focus);
   --color-hover-wash: var(--hover-wash);
   --color-scrim: var(--scrim);
+  /* Nested frosted blocks (§6.8 panels/dropdowns/bubbles) + their rims. */
+  --color-glass-strong: var(--glass-strong);
+  --color-glass-border: var(--glass-border);
+  /* Semantic accents as utility colours (toasts, badge-danger, links). */
+  --color-info: var(--info);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-overlay-ink: var(--overlay-ink);
+  --color-overlay-ink-muted: var(--overlay-ink-muted);
+  --color-overlay-track: var(--overlay-track);
 
   /* ── Brand ramp (TRD accent, blue-violet) ───────────────────────────── */
   --color-brand-50: var(--brand-50);
@@ -188,15 +199,78 @@ body::before {
     padding-left: 2.25rem;
   }
 
-  /* Primary CTA — accent gradient pill with glow. Gradient stops are the
-     AA-safe "strong" pair (white text ≥4.5:1, GLS-04 over mockup estimate). */
+  /* Primary CTA (BTN-01) — accent gradient pill with glow. Gradient stops
+     are the AA-safe "strong" pair (white text ≥4.5:1, GLS-04 over mockup
+     estimate). Hover lifts −1px, press settles, focus-visible rings. */
   .btn-primary {
-    @apply relative inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply relative inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white transition hover:-translate-y-px hover:brightness-110 active:translate-y-0 active:brightness-95 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent-primary/40;
     background-image: var(--accent-gradient);
     box-shadow: 0 10px 28px -10px var(--btn-glow), inset 0 1px 0 rgba(255, 255, 255, 0.22);
   }
   .btn-primary:hover {
     box-shadow: 0 12px 32px -10px var(--btn-glow-hover), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+
+  /* Secondary (BTN-01) — glass-strong fill with accent ink, same states. */
+  .btn-secondary {
+    @apply relative inline-flex items-center justify-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition hover:-translate-y-px active:translate-y-0 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent-primary/35;
+    background-color: var(--glass-strong);
+    border-color: var(--glass-border);
+    color: var(--accent-ink);
+    box-shadow: var(--card-shadow);
+  }
+  .btn-secondary:hover {
+    box-shadow: 0 12px 26px -14px var(--btn-glow);
+  }
+
+  /* Icon button (BTN-01) — circular 40px, same hover/press/focus states. */
+  .btn-icon {
+    @apply inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-txt-muted transition hover:-translate-y-px hover:bg-hover-wash hover:text-txt-main active:translate-y-0 disabled:translate-y-0 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent-primary/35;
+  }
+
+  /* Interest/selection chip (CHP-01) — pill; selected = the same accent
+     gradient as the active nav pill. aria-pressed drives the state; size
+     utilities (text-xs/sm, px/py, tap44) stay with the call site. */
+  .chip {
+    @apply rounded-full border font-medium transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent-primary/35;
+    border-color: var(--border-1);
+    color: var(--text-2);
+  }
+  .chip:hover:not(:disabled) {
+    background-color: var(--hover-wash);
+    color: var(--text-1);
+  }
+  .chip[aria-pressed='true'],
+  .chip[aria-pressed='true']:hover {
+    background-image: var(--accent-gradient);
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 6px 16px -8px var(--btn-glow);
+  }
+  .chip:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  /* FEA-02: featured card bottom action strip. */
+  .feat-actions {
+    @apply grid flow-row-dense grid-cols-[1fr_auto] gap-2 rounded-xl border-t border-border-subtle bg-glass-strong px-3 py-2 backdrop-blur-md;
+    border-top-color: var(--glass-border);
+  }
+
+  /* Unread pills (BDG-01) — accent by default, danger variant; the 99+ cap
+     lives in JSX (badge > 99 ? '99+' : badge). `badge-on-accent` is the
+     inverse pill drawn on top of an active gradient nav item. */
+  .badge {
+    @apply inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold leading-none text-white;
+    background-color: var(--brand-800);
+  }
+  .badge-danger {
+    background-color: var(--red-500);
+  }
+  .badge-on-accent {
+    background-color: var(--surface);
+    color: var(--text-1);
   }
 
   .btn-ghost {

@@ -99,7 +99,7 @@ export default function CommentList({ post }: { post: Post }) {
                           decoding="async"
                           width={1600}
                           height={1200}
-                          className="aspect-[4/3] w-full rounded-lg border border-white/10 object-cover"
+                          className="aspect-[4/3] w-full rounded-lg border border-border-subtle object-cover"
                         />
                       ))}
                     </div>
@@ -120,7 +120,7 @@ export default function CommentList({ post }: { post: Post }) {
                     </button>
                   )}
                   {c.authorId !== me.id && (
-                    <button aria-label="Report comment" onClick={() => setReporting(c.id)} className="tap44 rounded-full p-1.5 text-slate-400 hover:bg-white/[0.06]">
+                    <button aria-label="Report comment" onClick={() => setReporting(c.id)} className="btn-icon">
                       <Flag size={15} />
                     </button>
                   )}

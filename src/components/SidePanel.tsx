@@ -68,7 +68,7 @@ export default function SidePanel() {
               <li key={t.tag}>
                 <Link
                   to={`/hashtag/${encodeURIComponent(t.tag)}`}
-                  className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-600 transition hover:bg-white/[0.05] hover:text-brand-600"
+                  className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition hover:bg-hover-wash hover:text-txt-main"
                 >
                   <Hash size={14} aria-hidden />#{t.tag}
                 </Link>

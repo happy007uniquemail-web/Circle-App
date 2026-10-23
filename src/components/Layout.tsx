@@ -87,9 +87,7 @@ function NavItem({
             <Icon size={20} aria-hidden />
             {typeof badge === 'number' && badge > 0 && (
               <span
-                className={`absolute -right-2 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[10px] font-bold ${
-                  isActive ? 'bg-surface text-txt-main' : 'bg-brand-800 text-white'
-                }`}
+                className={`badge absolute -right-2 -top-1.5 ${isActive ? 'badge-on-accent' : ''}`}
               >
                 {badge > 99 ? '99+' : badge}
               </span>
@@ -135,7 +133,7 @@ function TabLink({
           >
             <Icon size={19} aria-hidden />
             {typeof badge === 'number' && badge > 0 && (
-              <span className="absolute -right-1 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-brand-800 px-1 text-[10px] font-bold text-white">
+              <span className="badge absolute -right-1 -top-1.5 shadow">
                 {badge > 99 ? '99+' : badge}
               </span>
             )}
@@ -278,7 +276,7 @@ export default function Layout() {
               >
                 <MessageCircle size={20} aria-hidden />
                 {dmUnread > 0 && (
-                  <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-brand-800 px-1 text-[10px] font-bold text-white shadow">
+                  <span className="badge absolute -right-0.5 -top-0.5 shadow">
                     {dmUnread > 99 ? '99+' : dmUnread}
                   </span>
                 )}

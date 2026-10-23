@@ -30,6 +30,10 @@
   /* Decorative bright gradient (dots, progress, borders). */
   --accent-soft: linear-gradient(135deg, var(--accent-from), var(--accent-to));
   --focus-ring: var(--accent-solid);
+  /* Accent as TEXT on light glass (btn-secondary): light uses the solid
+     stop (4.5:1 on white) — dark re-points to the brighter `from` stop
+     below so ink holds contrast on obsidian glass (GLS-04). */
+  --accent-ink: var(--accent-solid);
 
   /* ── Semantic accents (TRD §3.1) ───────────────────────────────────── */
   --like: #ff6b3d;
@@ -207,6 +211,8 @@
   --accent-gradient: linear-gradient(135deg, var(--accent-strong-from), var(--accent-strong-to));
   --accent-soft: linear-gradient(135deg, var(--accent-from), var(--accent-to));
   --focus-ring: var(--accent-solid);
+  /* Brighter stop as ink: dark glass needs the light blue for 4.5:1. */
+  --accent-ink: var(--accent-from);
 
   --like: #ff6b3d;
   --success: #2fcb8a;

@@ -28,12 +28,14 @@ function ToastItem(msg: string, kind: Kind): Toast {
 }
 
 const STYLES: Record<Kind, { cls: string; icon: typeof Info }> = {
-  info: { cls: 'border-white/10 bg-glass text-slate-200', icon: Info },
-  error: { cls: 'border-red-200/70 bg-red-50/85 text-red-800', icon: XCircle },
-  success: { cls: 'border-emerald-200/70 bg-emerald-50/85 text-emerald-800', icon: CheckCircle2 },
+  info: { cls: 'text-txt-main [&_svg]:text-info', icon: Info },
+  error: { cls: 'text-red-600', icon: XCircle },
+  success: { cls: 'text-emerald-600', icon: CheckCircle2 },
 };
 
-/** Mount once inside the app shell. */
+/** Mount once inside the app shell. TST-01: glass pill, aria-live region —
+ *  top-centre on mobile (clears the bottom tab bar), bottom-centre on
+ *  desktop. */
 export function Toaster() {
   const [list, setList] = useState<Toast[]>([]);
   useEffect(() => {
@@ -46,7 +48,7 @@ export function Toaster() {
   return (
     <div
       aria-live="polite"
-      className="pointer-events-none fixed inset-x-0 bottom-20 z-50 flex flex-col items-center gap-2 px-4 md:bottom-6 md:right-6 md:left-auto md:items-end"
+      className="pointer-events-none fixed inset-x-0 top-4 z-50 flex flex-col items-center gap-2 px-4 md:top-auto md:bottom-6"
     >
       {list.map((t) => {
         const { cls, icon: Icon } = STYLES[t.kind];
@@ -54,7 +56,7 @@ export function Toaster() {
           <div
             key={t.id}
             role="status"
-            className={`pointer-events-auto flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm shadow-xl shadow-black/50 backdrop-blur-2xl ${cls}`}
+            className={`pointer-events-auto flex items-center gap-2 rounded-full border border-glass-border bg-glass-strong px-4 py-2.5 text-sm font-medium shadow-xl shadow-black/40 backdrop-blur-2xl ${cls}`}
           >
             <Icon size={16} className="shrink-0" />
             {t.msg}

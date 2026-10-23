@@ -49,7 +49,7 @@ export default function ReportModal({
             type="button"
             onClick={onClose}
             aria-label="Close report dialog"
-            className="tap44 absolute right-2 top-2 rounded-full p-1.5 text-slate-500 hover:bg-white/[0.06]"
+            className="btn-icon absolute right-2 top-2 z-10"
           >
             <X size={18} />
           </button>
@@ -58,7 +58,7 @@ export default function ReportModal({
         <fieldset className="space-y-1.5">
           <legend className="mb-1 text-sm font-semibold">Reason *</legend>
           {REASONS.map((r) => (
-            <label key={r.value} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 text-sm hover:bg-white/[0.06]">
+            <label key={r.value} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 text-sm transition hover:bg-hover-wash">
               <input
                 type="radio"
                 name="reason"

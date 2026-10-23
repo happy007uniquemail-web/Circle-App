@@ -35,7 +35,7 @@ export default function FollowButton({ userId, compactLabel = false }: { userId:
       disabled={pending}
       aria-pressed={following}
       aria-label={following ? 'Unfollow' : requested ? 'Cancel follow request' : 'Follow'}
-      className={following || requested ? 'btn-ghost border border-white/15 bg-white/[0.05]' : 'btn-primary'}
+      className={following || requested ? 'btn-secondary' : 'btn-primary'}
     >
       {following ? (
         <>

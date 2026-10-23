@@ -48,33 +48,49 @@ export default function ShareMenu({ post, onClose }: { post: Post; onClose: () =
       <div className="p-5">
         <div className="mb-4 flex items-center justify-between pr-8">
           <h2 className="text-lg font-bold">Share post</h2>
-          <button onClick={onClose} aria-label="Close share dialog" className="tap44 absolute right-2 top-2 rounded-full p-1.5 text-slate-500 hover:bg-white/[0.06]">
+          <button
+            aria-label="Close share dialog"
+            onClick={onClose}
+            className="btn-icon absolute right-2 top-2 z-10"
+          >
             <X size={18} />
           </button>
         </div>
 
-        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-slate-600">
+        <div className="rounded-xl border border-border-subtle bg-glass-strong p-3 text-sm text-slate-600">
           <p className="line-clamp-2">{post.body || 'Photo post'}</p>
         </div>
 
         <div className="mt-4 space-y-1">
-          <button onClick={copyLink} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white/[0.06]">
+          <button
+            onClick={copyLink}
+            className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition hover:bg-hover-wash"
+          >
             {copied ? <Check size={16} className="text-emerald-600" /> : <Copy size={16} className="text-slate-500" />}
             {copied ? 'Link copied' : 'Copy link'}
           </button>
 
-          <a href={`/p/${post.id}`} target="_blank" rel="noopener" onClick={onClose} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white/[0.06]">
+          <a
+            href={`/p/${post.id}`}
+            target="_blank"
+            rel="noopener"
+            onClick={onClose}
+            className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition hover:bg-hover-wash"
+          >
             <ExternalLink size={16} className="text-slate-500" /> Open post in new tab
           </a>
 
           {typeof navigator !== 'undefined' && 'share' in navigator && (
-            <button onClick={nativeShare} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white/[0.06]">
+            <button
+              onClick={nativeShare}
+              className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition hover:bg-hover-wash"
+            >
               <Share2 size={16} className="text-slate-500" /> Share via device…
             </button>
           )}
         </div>
 
-        <div className="mt-4 border-t border-white/10 pt-3">
+        <div className="mt-4 border-t border-border-subtle pt-3">
           <p className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-400">
             <MessageCircle size={13} /> Send in a message
           </p>
@@ -89,7 +105,10 @@ export default function ShareMenu({ post, onClose }: { post: Post; onClose: () =
             <ul className="max-h-56 space-y-1 overflow-y-auto">
               {convs.map((c) => (
                 <li key={c.conversation.id}>
-                  <button onClick={() => sendTo(c.conversation.id)} className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-white/[0.06]">
+                <button
+                  onClick={() => sendTo(c.conversation.id)}
+                  className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition hover:bg-hover-wash"
+                >
                     <Avatar src={c.other.avatarUrl} name={c.other.displayName} size={32} />
                     <span className="min-w-0 flex-1 truncate text-sm">
                       <b>{c.other.displayName}</b>

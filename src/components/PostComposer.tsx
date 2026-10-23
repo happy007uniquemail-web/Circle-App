@@ -71,7 +71,7 @@ export default function PostComposer() {
           />
 
           {video && (
-            <div className="mb-2 flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm backdrop-blur-md">
+            <div className="mb-2 flex items-center gap-2 rounded-xl border border-border-subtle bg-glass-strong px-3 py-2 text-sm">
               <Film size={15} className="text-brand-600" />
               <span className="min-w-0 flex-1 truncate">{video.name}</span>
               <span className="text-xs text-slate-400">{video.seconds}s</span>

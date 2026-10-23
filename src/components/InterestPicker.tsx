@@ -102,13 +102,7 @@ export default function InterestPicker({
                       aria-label={`${on ? 'Remove' : 'Add'} interest ${i.name}`}
                       disabled={disabled}
                       onClick={() => toggle(i.id)}
-                      className={`tap44 rounded-full border px-3 py-1.5 text-sm transition ${
-                        on
-                          ? 'border-brand-600 bg-brand-600 text-white'
-                          : disabled
-                            ? 'cursor-not-allowed border-slate-100 text-slate-300'
-                            : 'border-slate-200 text-slate-700 hover:border-brand-400 hover:bg-brand-50'
-                      }`}
+                      className="chip tap44 px-3 py-1.5 text-sm"
                     >
                       {i.name}
                     </button>

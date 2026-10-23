@@ -29,16 +29,7 @@ function Chip({
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={`tap44 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-        active
-          ? 'grad-accent border-transparent text-white shadow-md'
-          : 'border-border-subtle text-txt-muted hover:bg-hover-wash hover:text-txt-main'
-      }`}
-    >
+    <button type="button" aria-pressed={active} onClick={onClick} className="chip tap44 whitespace-nowrap px-3 py-1.5 text-xs">
       {children}
     </button>
   );
