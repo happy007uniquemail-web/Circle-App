@@ -2,7 +2,7 @@
 
 A social web app — sign in with Google, build a profile, post text + photos or a short video, follow people, like, comment, repost, share, and chat — with stories, hashtags, direct messages, live notifications, moderation, interest-based suggestions, privacy controls, and **cabins** (group spaces with their own chat).
 
-Runs two ways from one build: **demo mode** (localStorage, seeded world, no backend) and **live mode** against Supabase (Auth + PostgREST + Storage + Realtime) — the provider is picked at boot from the env.
+Runs in **official mode only**, against Supabase (Auth + PostgREST + Storage + Realtime). There is no demo or offline fallback: both backend environment variables are required.
 
 Built from [`PLAN.md`](./PLAN.md); hardened per `circle-improvement-trd (1).md` (workstreams audit → G, see *Workstreams* below).
 
@@ -10,23 +10,17 @@ Built from [`PLAN.md`](./PLAN.md); hardened per `circle-improvement-trd (1).md` 
 
 ## Quick start
 
+Prerequisite: a Supabase project with migrations `0001`–`0009` applied (see *Going live* below).
+
 ```bash
 npm install
-npm run dev        # http://localhost:5173
-npm run build      # type-check + production bundle
-npm run preview    # serve the production build
+cp .env.example .env   # fill in VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
+npm run dev            # http://localhost:5173
+npm run build          # type-check + production bundle
+npm run preview        # serve the production build
 ```
 
-No configuration needed: the app boots in **demo mode** — a localStorage-backed `DemoProvider` with seeded users, posts, comments, likes, open reports, stories, DMs, notifications, interests, and 5 demo cabins (memberships, requests, and chat included). Set the Supabase env variables (see *Going live* below) and the identical build boots `SupabaseProvider` against your real backend instead.
-
-| Demo entry point | What it shows |
-|---|---|
-| **Continue with Google** | Simulated OAuth → onboarding (username/bio/avatar + ToS + interest picker) → home feed |
-| **Sign in as demo admin** | `/admin/reports` moderation queue (dismiss / remove content / suspend, incl. cabin reports) |
-
-> Tip: clear site data (or run `localStorage.removeItem('circle.state.v1')`) to reset the demo world.
-
-In `npm run dev`, an activity simulator fires an incoming like/comment/repost/follow every 60–120 s while the tab is visible, so live notification badges and toasts are observable without a backend.
+Vite bakes the Supabase values in at build time. If either variable is missing or still a template placeholder, the entry point renders a **Backend not configured** screen and the app's data layer never loads.
 
 ---
 
@@ -36,8 +30,8 @@ In `npm run dev`, an activity simulator fires an incoming like/comment/repost/fo
 |---|---|
 | Frontend | React 18 + TypeScript + Vite + Tailwind CSS v4 |
 | Routing | React Router v6, lazy route chunks |
-| Data | `DataProvider` contract → `DemoProvider` (local) / `SupabaseProvider` (Supabase Auth + PostgREST + Storage + Realtime) |
-| Media | Images resized/compressed client-side then uploaded to Supabase Storage; videos ≤60 s validated, ≤50 MB (demo mode keeps blobs in **IndexedDB**) |
+| Data | `DataProvider` contract → `SupabaseProvider` (Supabase Auth + PostgREST + Storage + Realtime) — the only backend |
+| Media | Images resized/compressed client-side then uploaded to Supabase Storage; videos ≤60 s and ≤50 MB, staged in **IndexedDB** until uploaded |
 | Database | PostgreSQL schema + RLS in `supabase/migrations/0001`–`0009` |
 | Icons | lucide-react |
 
@@ -52,8 +46,8 @@ src/
   types.ts                 domain types (mirror the SQL schema)
   config/limits.ts         SINGLE SOURCE OF TRUTH for all limits (see *Limits*)
   lib/
-    store.ts               DataProvider contract, DemoProvider, SupabaseProvider, all selectors
-    supabase.ts            live-backend client (env detection, storage uploads, error mapping)
+    store.ts               DataProvider contract, SupabaseProvider, all selectors
+    supabase.ts            required backend client (config guard, storage uploads, error mapping)
     media.ts               IndexedDB video blobs, video validation, media downloads
     compress.ts            image compression (resize → WebP/JPEG, quality, size report)
     auth.tsx               ProtectedRoute / AdminRoute / PublicOnly guards
@@ -106,7 +100,7 @@ The app was audited and hardened workstream-by-workstream; each has a fix record
 
 ## Going live with Supabase (production)
 
-The app picks its provider at boot (`src/lib/store.ts` factory): with `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` configured it runs **`SupabaseProvider`**; without them it falls back to the offline **`DemoProvider`**. To go live:
+The app always runs **`SupabaseProvider`** (`src/lib/store.ts`). When `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` are missing, `src/main.tsx` renders the setup screen instead of loading the app. To go live:
 
 1. **Create a Supabase project** and apply all nine migrations **in order** (SQL editor or CLI):
    ```bash
@@ -166,14 +160,15 @@ Enforced server-side in `0004_media_safety.sql`:
 - **SEC-04 headers** ship in `netlify.toml`: `Content-Security-Policy` (default-src 'self'; scripts self; images/media allow data:/blob:/Supabase Storage; `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` (camera/mic/geo/payment off).
 - **SEC-01/05**: RLS on every table + check constraints/triggers for all input rules (limits above).
 - **SEC-02**: only the anon key in the front end; no secrets in the repo.
-- **SEC-03**: user text renders via `RichText` as text (no `innerHTML`); XSS payloads display literally (verified in demo regression for posts, DMs, and cabin chat).
+- **SEC-03**: user text renders via `RichText` as text (no `innerHTML`); XSS payloads display literally (verified for posts, DMs, and cabin chat).
 - **SEC-06**: auth redirects restricted to Site URL + `http://localhost:5173`.
 
 ## Verification performed
 
 - `npm run build` — `tsc --noEmit` + Vite production bundle pass on every workstream.
-- **Browser regression (demo mode) per workstream**, incl.: media compression + quota messages; notification badges/toasts; privacy switches hiding data from other viewers; interest picker caps; cabin create/join/request/approve/decline/ban flows, members-only chat, unread badges, XSS-plain-text chat, moderation queue actions (incl. cabin + message reports). 0 console errors across the suite.
+- **Browser regression per workstream**, incl.: media compression + quota messages; notification badges/toasts; privacy switches hiding data from other viewers; interest picker caps; cabin create/join/request/approve/decline/ban flows, members-only chat, unread badges, XSS-plain-text chat, moderation queue actions (incl. cabin + message reports). 0 console errors across the suite.
 - Direct data-layer checks: rate limiting, blocking, soft delete, admin-only routes, duplicate-content guard.
+- **Official-mode boot guard**: missing or placeholder credentials render the setup screen; the app never falls back to local data.
 - Real-backend steps (migrations, two-browser realtime, direct-API RLS probes) are listed in each `docs/audit/*` record and in the deploy checklist.
 
 ## Deploy checklist
@@ -184,7 +179,7 @@ Enforced server-side in `0004_media_safety.sql`:
 - [ ] Realtime publication verified for messages/notifications/cabin tables
 - [ ] Supabase Auth: Email on; Google OAuth client + callback/origins whitelisted
 - [ ] Supabase URL configuration: Site URL = production origin, `localhost:5173` in Redirect URLs
-- [ ] `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` set in Netlify env vars, then redeploy
+- [ ] `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` set in Netlify env vars, then redeploy (required — the site shows the setup screen without them)
 - [ ] Daily database backups enabled (dashboard → backups)
 - [ ] Storage usage alerts at 70% / 90% configured (see *Storage & quota monitoring*)
 - [ ] `/terms` and `/privacy` reachable (already in the bundle); `/admin` disallowed in robots.txt
@@ -196,4 +191,4 @@ Enforced server-side in `0004_media_safety.sql`:
 - **Scope**: all P0 + P1 requirements, the v2 expansion (repost/share/stories/video/DMs/hashtags/saves), and the improvement TRD workstreams A–G. P2 (email digests, custom interest proposals, typing indicators, system chat messages, cabin invites) intentionally out — schema-ready, see `docs/audit/*` deferred registers.
 - **Soft delete**: posts/comments/cabin messages are hidden immediately, purged after 30 days; expired stories purged on load (+ SQL `purge_expired_stories()`).
 - **Accessibility**: semantic landmarks, labelled controls, visible focus rings, alt text, 320 px → desktop layout with a mobile tab bar; cabin chat is `dvh`-aware so the keyboard never covers the composer.
-- **Demo mode is a first-class citizen**: it mirrors the live data model (same types, same guards) so UI work and regression runs need no backend.
+- **Official backend only**: demo mode has been removed. Local development needs a Supabase project (the free tier is sufficient) with the migrations applied.

@@ -1,7 +1,7 @@
 /**
  * Client-side rate limiting (MOD-4).
- * Demo-mode guardrails; the production equivalent is a Supabase Edge Function /
- * database-level throttle — this keeps the UX honest either way.
+ * The authoritative throttle lives in Postgres (RPC guards + triggers); this
+ * layer keeps the UX honest before a request is sent.
  */
 
 const buckets = new Map<string, number[]>();

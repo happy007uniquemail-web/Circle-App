@@ -64,9 +64,3 @@ export function avatarFor(id: string, name: string): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="96" height="96" rx="48" fill="${bg}"/><text x="48" y="48" font-family="system-ui,sans-serif" font-size="36" font-weight="600" fill="#fff" text-anchor="middle" dominant-baseline="central">${initials(name)}</text></svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
-
-/** Deterministic gradient image used to seed demo posts (offline-friendly). */
-export function svgImage(label: string, from: string, to: string): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient></defs><rect width="800" height="500" fill="url(#g)"/><text x="40" y="460" font-family="system-ui,sans-serif" font-size="34" font-weight="600" fill="rgba(255,255,255,.92)">${label}</text></svg>`;
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
-}

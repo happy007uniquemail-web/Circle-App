@@ -1,9 +1,10 @@
 /**
- * Live Supabase backend (production mode).
+ * Supabase backend client.
  *
- * When VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY are configured, `store.ts`
- * boots `SupabaseProvider` against this module; otherwise the offline
- * DemoProvider keeps the app fully functional without a server.
+ * The app runs in official mode only: VITE_SUPABASE_URL and
+ * VITE_SUPABASE_ANON_KEY are required, and `store.ts` boots
+ * `SupabaseProvider` against this module. Missing credentials render a setup
+ * screen at the entry point instead of starting the app.
  *
  * The client is a module singleton so auth state (persisted session,
  * auto-refresh, `detectSessionInUrl` for the OAuth/email-confirm return trip)
@@ -25,15 +26,13 @@ function createSupabaseClient(): SupabaseClient | null {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
     });
   } catch (e) {
-    // A malformed env var must fall back to demo mode, not blank the app.
     console.error('[circle] Supabase client init failed:', e);
     return null;
   }
 }
 
+/** `null` when the deployment is missing credentials — the entry point shows setup instructions. */
 export const supabase: SupabaseClient | null = createSupabaseClient();
-
-export const realBackend: boolean = supabase !== null;
 
 /* ------------------------------------------------------------------ storage */
 
@@ -103,7 +102,7 @@ export async function deleteMediaUrls(urls: Array<string | null | undefined>): P
   for (const url of urls) {
     if (!url) continue;
     const m = /\/storage\/v1\/object\/public\/(avatars|post-images|media)\/(.+)$/.exec(url);
-    if (!m) continue; // not a storage URL (OAuth avatar, demo data:, vid:)
+    if (!m) continue; // not a storage URL (OAuth avatar, data:, vid:)
     const bucket = m[1] as MediaBucket;
     byBucket.set(bucket, [...(byBucket.get(bucket) ?? []), decodeURIComponent(m[2])]);
   }

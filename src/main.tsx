@@ -1,9 +1,9 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
-import App from './App';
+import ConfigRequired from './pages/ConfigRequired';
 import { applyUiPrefs, loadUiPrefs, watchSystemUiPrefs } from './lib/uiPrefs';
-import { provider } from './lib/store';
+import { supabase } from './lib/supabase';
 import './index.css';
 
 /**
@@ -15,27 +15,23 @@ import './index.css';
 applyUiPrefs(loadUiPrefs());
 watchSystemUiPrefs();
 
-/**
- * Realtime notifications demo (F-RT, DEV only): while the tab is visible,
- * fabricate an incoming like/comment/repost/follow every 60–120 s so live
- * bell badges + toasts are observable without a backend. Production replaces
- * this with Supabase Realtime (see README §Realtime).
- */
-if (import.meta.env.DEV) {
-  const tick = () => {
-    if (document.visibilityState === 'visible') {
-      const desc = provider.simulateIncomingActivity();
-      if (desc) window.dispatchEvent(new CustomEvent('circle:activity', { detail: desc }));
-    }
-    window.setTimeout(tick, 60_000 + Math.random() * 60_000);
-  };
-  window.setTimeout(tick, 45_000);
-}
+const root = createRoot(document.getElementById('root')!);
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
-  </StrictMode>,
-);
+// Official mode only: without credentials the app never loads its data layer.
+if (!supabase) {
+  root.render(
+    <StrictMode>
+      <ConfigRequired />
+    </StrictMode>,
+  );
+} else {
+  void import('./App').then(({ default: App }) => {
+    root.render(
+      <StrictMode>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </StrictMode>,
+    );
+  });
+}

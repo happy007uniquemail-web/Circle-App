@@ -270,7 +270,7 @@ export interface FeedItem {
   repostedAt: string | null;
 }
 
-/** Everything persisted by the data provider (DemoProvider = localStorage). */
+/** Complete snapshot hydrated by the data provider for selectors. */
 export interface AppState {
   session: SessionUser | null;
   profiles: Profile[];
