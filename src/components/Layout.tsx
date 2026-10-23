@@ -110,6 +110,27 @@ export default function Layout() {
             />
           </form>
           <div className="ml-auto flex items-center gap-1">
+            {/* Cabins in the header too: between md and lg neither the rail
+                (lg+) nor the tab bar (< md) is visible, so without this the
+                Cabins option disappears entirely at those widths (BLK/nav). */}
+            <NavLink
+              to="/cabins"
+              aria-label={`Cabins${cabinUnread ? `, ${cabinUnread} unread` : ''}`}
+              className={({ isActive }) =>
+                `tap44 relative hidden rounded-full border p-2 transition md:inline-flex lg:hidden ${
+                  isActive
+                    ? 'border-brand-500/40 bg-brand-500/15 text-brand-600'
+                    : 'border-brand-500/25 bg-brand-500/[0.07] text-slate-600 hover:border-brand-500/40 hover:bg-brand-500/15'
+                }`
+              }
+            >
+              <Tent size={20} />
+              {cabinUnread > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-brand-800 px-1 text-[10px] font-bold text-white shadow">
+                  {cabinUnread}
+                </span>
+              )}
+            </NavLink>
             {/* Duplicated by the desktop sidebar — hidden on lg+ (BLK-05) */}
             <NavLink
               to="/messages"
@@ -150,6 +171,7 @@ export default function Layout() {
                 <MenuLink to={`/u/${me.username}`} icon={<UserIcon size={15} />} label="View profile" />
                 <MenuLink to="/saved" icon={<Bookmark size={15} />} label="Saved posts" />
                 <MenuLink to="/messages" icon={<MessageCircle size={15} />} label="Messages" />
+                <MenuLink to="/cabins" icon={<Tent size={15} />} label="Cabins" />
                 <MenuLink to="/settings" icon={<Settings size={15} />} label="Settings" />
                 {me.role === 'admin' && <MenuLink to="/admin/reports" icon={<Shield size={15} />} label="Moderation queue" />}
                 <button
