@@ -32,6 +32,7 @@ import {
   unreadCount,
   useActions,
   useAppState,
+  useDataReady,
 } from '../lib/store';
 
 function Brand() {
@@ -166,6 +167,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const online = useOnlineStatus();
+  const ready = useDataReady();
   const [drawer, setDrawer] = useState(false);
   const accountRef = useRef<HTMLDetailsElement>(null);
 
@@ -188,7 +190,27 @@ export default function Layout() {
     return () => window.removeEventListener('circle:activity', onActivity);
   }, []);
 
-  if (!state.session || !me) return null;
+  if (!state.session) return null;
+  // Session exists but the profile row hasn't hydrated yet (UI-04): show a
+  // spinner instead of a blank shell, and a retry path if hydration failed.
+  if (!me) {
+    return ready ? (
+      <div className="grid min-h-screen place-items-center p-6">
+        <div className="card max-w-sm p-8 text-center">
+          <h1 className="text-lg font-bold">Couldn’t load your profile</h1>
+          <p className="mt-1 text-sm text-slate-600">Check your connection and try again.</p>
+          <div className="mt-4 flex justify-center gap-2">
+            <button onClick={() => void actions.refresh()} className="btn-ghost">Retry</button>
+            <button onClick={signOut} className="btn-primary">Sign out</button>
+          </div>
+        </div>
+      </div>
+    ) : (
+      <div className="grid min-h-screen place-items-center" role="status" aria-label="Loading Circle">
+        <span className="h-8 w-8 animate-spin rounded-full border-[3px] border-brand-200 border-t-brand-600" />
+      </div>
+    );
+  }
   const dmUnread = unreadConversationCount(state, me.id);
   const notifUnread = unreadCount(state, me.id);
   const cabinUnread = totalCabinUnread(state, me.id); // CHT-07 nav badge

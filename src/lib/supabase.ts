@@ -17,14 +17,23 @@ import { getVideoUrl } from './media';
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
-/** Always true — the app runs in official Supabase mode only. */
-export const realBackend: boolean = true;
-
-export const supabase: SupabaseClient | null = realBackend
-  ? createClient(url!, anon!, {
+/** Real credentials present (template placeholders like `<project-ref>` do not count). */
+function createSupabaseClient(): SupabaseClient | null {
+  if (!url || !anon || !/^https:\/\/[^\s<]+$/i.test(url) || anon.includes('<')) return null;
+  try {
+    return createClient(url, anon, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
-    })
-  : null;
+    });
+  } catch (e) {
+    // A malformed env var must fall back to demo mode, not blank the app.
+    console.error('[circle] Supabase client init failed:', e);
+    return null;
+  }
+}
+
+export const supabase: SupabaseClient | null = createSupabaseClient();
+
+export const realBackend: boolean = supabase !== null;
 
 /* ------------------------------------------------------------------ storage */
 

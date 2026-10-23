@@ -117,7 +117,7 @@ export default function Cabins() {
           {mine.length > 0 && (
             <section aria-label="My cabins">
               <h2 className="mb-2 text-sm font-semibold text-slate-600">
-                My cabins <span className="text-xs font-normal text-slate-400">({joined}/{joinedCabinCount(state, me.id)} joined, {owned}/{LIMITS.cabinCreateMax} owned)</span>
+                My cabins <span className="text-xs font-normal text-slate-400">({joined}/{LIMITS.cabinJoinMax} joined, {owned}/{LIMITS.cabinCreateMax} owned)</span>
               </h2>
               <ul className="space-y-2">
                 {mine.map((c) => (

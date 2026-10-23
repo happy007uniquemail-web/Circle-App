@@ -39,13 +39,13 @@ export function StoryViewer({
   const group = groups[groupIdx];
   const story: Story | undefined = group?.stories[segIdx];
 
-  // Auto-advance every 5 s (video stories advance when playback ends via key).
+  // Images/text auto-advance every 5 s; videos advance when playback ends.
   useEffect(() => {
-    if (!story || paused) return;
+    if (!story || paused || story.kind === 'video') return;
     const t = window.setTimeout(() => advance(1), 5000);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [story?.id, paused]);
+  }, [story?.id, story?.kind, paused]);
 
   function advance(dir: 1 | -1) {
     if (!group) return onClose();
@@ -152,7 +152,7 @@ export function StoryViewer({
           {story.kind === 'video' && story.media && (
             /* Same contract for video: the frame matches the video's intrinsic format */
             <div className="relative mx-auto w-fit max-w-full">
-              <VideoPlayer refKey={story.media} poster={false} label={`Video story by ${group.profile.displayName}`} className="max-h-[calc(100dvh-11rem)] w-auto object-contain" />
+              <VideoPlayer refKey={story.media} poster={false} onEnded={() => advance(1)} label={`Video story by ${group.profile.displayName}`} className="max-h-[calc(100dvh-11rem)] w-auto object-contain" />
               {chevrons}
             </div>
           )}

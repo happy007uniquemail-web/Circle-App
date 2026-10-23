@@ -63,7 +63,7 @@ export default function InfiniteFeed({ items, hasMore, onLoadMore, empty, loadin
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [items.length === 0]);
+  }, [items.length === 0, hasMore]);
 
   if (items.length === 0 && empty) return <>{empty}</>;
 

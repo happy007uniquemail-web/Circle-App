@@ -8,13 +8,15 @@ interface Props {
   poster?: boolean; // show first frame only until played
   downloadable?: boolean;
   label: string;
+  /** Fired when playback reaches the end (story auto-advance). */
+  onEnded?: () => void;
 }
 
 /**
  * Lazily resolves a video reference (IndexedDB → object URL) and renders a
  * metadata-only player (F-VID, F-OPT: no bytes fetched until user plays).
  */
-export default function VideoPlayer({ refKey, className = '', poster = true, downloadable = false, label }: Props) {
+export default function VideoPlayer({ refKey, className = '', poster = true, downloadable = false, label, onEnded }: Props) {
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   // Callers that pass any `w-*` class own the sizing (e.g. story frames use
@@ -53,7 +55,7 @@ export default function VideoPlayer({ refKey, className = '', poster = true, dow
         controls
         preload="metadata"
         playsInline
-        muted
+        onEnded={onEnded}
         aria-label={label}
         className={`${width} rounded-xl border border-border-subtle bg-black ${className}`}
       />

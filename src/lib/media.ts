@@ -127,11 +127,15 @@ export async function validateVideo(file: File): Promise<{ ok: true; duration: n
   try {
     const { duration, width, height } = await new Promise<{ duration: number; width: number; height: number }>((resolve, reject) => {
       const v = document.createElement('video');
+      const timer = window.setTimeout(() => reject(new Error('timeout')), 8000);
+      const finish = (fn: () => void) => {
+        window.clearTimeout(timer);
+        fn();
+      };
       v.preload = 'metadata';
-      v.onloadedmetadata = () => resolve({ duration: v.duration, width: v.videoWidth, height: v.videoHeight });
-      v.onerror = () => reject(new Error('unreadable'));
+      v.onloadedmetadata = () => finish(() => resolve({ duration: v.duration, width: v.videoWidth, height: v.videoHeight }));
+      v.onerror = () => finish(() => reject(new Error('unreadable')));
       v.src = url;
-      setTimeout(() => reject(new Error('timeout')), 8000);
     });
     if (!isFinite(duration) || duration < 0.5) return { ok: false, error: 'Video is empty or unreadable.' };
     if (duration > LIMITS.videoMaxSeconds) {

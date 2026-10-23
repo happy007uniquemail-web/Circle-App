@@ -125,6 +125,7 @@ export default function Onboarding() {
                 onChange={(urls) => setAvatarUrl(urls[0] ?? '')}
                 max={1}
                 maxEdge={LIMITS.avatarMaxEdgePx}
+                compressedMaxBytes={LIMITS.avatarMaxPostCompressBytes}
                 label="Upload a photo (optional)"
               />
             </div>

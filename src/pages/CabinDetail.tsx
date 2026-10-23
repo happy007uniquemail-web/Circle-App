@@ -12,6 +12,7 @@ import {
   ImagePlus,
   Loader2,
   LogOut,
+  Reply,
   Send,
   Tent,
   Trash2,
@@ -92,6 +93,8 @@ export default function CabinDetail() {
   const mod = id ? canModerateCabin(state, id, me ?? null) : false;
   const owner = id ? isCabinOwner(state, id, me ?? null) : false;
   const members = id ? cabinMembersOf(state, id) : [];
+  // RLS hides member rows from non-members; the stored count keeps the header honest.
+  const memberTotal = Math.max(members.length, cabin?.memberCount ?? 0);
   const pending = id && mod ? cabinPendingRequests(state, id) : [];
   const myReq = id && me ? myCabinRequest(state, id, me) : null;
   const tags = id ? cabinInterestTagsOf(state, id) : [];
@@ -105,11 +108,12 @@ export default function CabinDetail() {
   );
   const visible = allMessages.slice(Math.max(0, allMessages.length - visibleCount));
 
-  // CHT-07: opening the cabin stamps last_read_at (nav badge clears).
+  // CHT-07: opening the cabin stamps last_read_at (nav badge clears); new
+  // messages that arrive while it's open are stamped too.
   useEffect(() => {
     if (activeMember && id) void actions.markCabinRead(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, activeMember]);
+  }, [id, activeMember, allMessages.length]);
 
   // CHT-06: smart auto-scroll — follow new messages only when near the bottom.
   useEffect(() => {
@@ -310,9 +314,8 @@ export default function CabinDetail() {
               </div>
               <p className="mt-0.5 text-xs text-slate-500">
                 <Users size={12} className="mr-1 inline -translate-y-px" aria-hidden />
-                {members.length} {members.length === 1 ? 'member' : 'members'}
-                {ownerProfile && (
-                  <>
+                {memberTotal} {memberTotal === 1 ? 'member' : 'members'}
+                {ownerProfile && (                  <>
                     {' · '}owner{' '}
                     <Link to={`/u/${ownerProfile.username}`} className="font-semibold text-brand-600 hover:underline">
                       {ownerProfile.displayName}
@@ -579,15 +582,24 @@ export default function CabinDetail() {
                                 </button>
                               </span>
                             )}
-                            {!mine && !m.isDeleted && (
-                              <span className="mt-1 block">
+                            {!m.isDeleted && (
+                              <span className={`mt-1 flex gap-1 ${mine ? 'justify-end' : ''}`}>
                                 <button
-                                  onClick={() => setReportMsgId(m.id)}
-                                  aria-label="Report message"
-                                  className="tap44 rounded-full p-1 text-slate-400 opacity-40 transition hover:bg-black/10 hover:opacity-100"
+                                  onClick={() => setReplyTo(m.id)}
+                                  aria-label="Reply to message"
+                                  className={`tap44 rounded-full p-1 opacity-40 transition hover:opacity-100 ${mine ? 'hover:bg-white/15' : 'hover:bg-black/10'}`}
                                 >
-                                  <Flag size={12} />
+                                  <Reply size={12} />
                                 </button>
+                                {!mine && (
+                                  <button
+                                    onClick={() => setReportMsgId(m.id)}
+                                    aria-label="Report message"
+                                    className="tap44 rounded-full p-1 text-slate-400 opacity-40 transition hover:bg-black/10 hover:opacity-100"
+                                  >
+                                    <Flag size={12} />
+                                  </button>
+                                )}
                               </span>
                             )}
                           </>
@@ -671,7 +683,7 @@ export default function CabinDetail() {
       {/* ---- Members panel (CAB-04 list, CHT-12 moderation) ---- */}
       <details className="card p-4" open={mod && pending.length > 0}>
         <summary className="cursor-pointer select-none text-sm font-semibold">
-          Members ({members.length})
+          Members ({memberTotal})
         </summary>
         <ul className="mt-2 space-y-1">
           {members.map((m) => {

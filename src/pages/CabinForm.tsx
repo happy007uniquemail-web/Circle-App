@@ -1,10 +1,10 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { ArrowLeft, Info, Loader2, Tent } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from '../components/Toast';
 import ImageUploader from '../components/ImageUploader';
 import InterestPicker from '../components/InterestPicker';
-import { cabinById, currentUserProfile, ownedCabinCount, useActions, useAppState } from '../lib/store';
+import { cabinById, canModerateCabin, currentUserProfile, ownedCabinCount, useActions, useAppState, useDataReady } from '../lib/store';
 import { LIMITS } from '../types';
 import type { CabinType } from '../types';
 
@@ -26,9 +26,7 @@ export default function CabinForm() {
   const me = currentUserProfile(state);
 
   const cabin = editing ? cabinById(state, id!) : null;
-  if (editing && !cabin) {
-    return <p className="card p-6 text-sm text-slate-600">Cabin not found — it may have been deleted.</p>;
-  }
+  const ready = useDataReady();
 
   const [name, setName] = useState(cabin?.name ?? '');
   const [description, setDescription] = useState(cabin?.description ?? '');
@@ -38,6 +36,17 @@ export default function CabinForm() {
     editing ? (state.cabinInterests ?? []).filter((ci) => ci.cabinId === cabin?.id).map((ci) => ci.interestId) : [],
   );
   const [busy, setBusy] = useState(false);
+
+  // The cabin row lands after hydration (Supabase) — seed the form when it does.
+  useEffect(() => {
+    if (!cabin) return;
+    setName(cabin.name);
+    setDescription(cabin.description ?? '');
+    setImageUrl(cabin.imageUrl ?? null);
+    setType(cabin.type);
+    setTags((state.cabinInterests ?? []).filter((ci) => ci.cabinId === cabin.id).map((ci) => ci.interestId));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cabin?.id]);
 
   // Live CAB-01 checks (DB enforces the same rules on submit).
   const trimmedName = name.trim();
@@ -74,6 +83,22 @@ export default function CabinForm() {
   }
 
   if (!me) return null;
+  if (editing && !cabin) {
+    return ready ? (
+      <p className="card p-6 text-sm text-slate-600">Cabin not found — it may have been deleted.</p>
+    ) : (
+      <p className="card p-6 text-sm text-slate-500" role="status">Loading cabin…</p>
+    );
+  }
+  if (editing && cabin && !canModerateCabin(state, cabin.id, me.id)) {
+    return (
+      <div className="card p-8 text-center">
+        <h1 className="text-lg font-bold">You can’t edit this cabin</h1>
+        <p className="mt-1 text-sm text-slate-600">Only the cabin’s owner or an admin can change its details.</p>
+        <button onClick={() => navigate(`/cabins/${cabin.id}`)} className="btn-primary mt-4">Back to cabin</button>
+      </div>
+    );
+  }
   const atCreateCap = !editing && ownedCabinCount(state, me.id) >= LIMITS.cabinCreateMax;
 
   return (

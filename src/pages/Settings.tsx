@@ -102,6 +102,7 @@ export default function Settings() {
             onChange={(urls) => setAvatarUrl(urls[0] ?? '')}
             max={1}
             maxEdge={LIMITS.avatarMaxEdgePx}
+            compressedMaxBytes={LIMITS.avatarMaxPostCompressBytes}
             label="Change photo"
           />
         </div>

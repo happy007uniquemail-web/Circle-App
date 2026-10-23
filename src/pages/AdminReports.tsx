@@ -29,12 +29,18 @@ export default function AdminReports() {
   }
 
   async function removeContent(report: Report) {
-    if (report.targetType === 'post') await actions.deletePost(report.targetId);
-    else if (report.targetType === 'comment') await actions.deleteComment(report.targetId);
-    else if (report.targetType === 'cabin_message') await actions.deleteCabinMessage(report.targetId); // CHT-12
-    else return;
-    await resolve(report.id, 'actioned');
-    toast('Content removed.', 'success');
+    const r =
+      report.targetType === 'post' ? await actions.deletePost(report.targetId)
+      : report.targetType === 'comment' ? await actions.deleteComment(report.targetId)
+      : report.targetType === 'cabin_message' ? await actions.deleteCabinMessage(report.targetId) // CHT-12
+      : null;
+    if (!r) return;
+    if (!r.ok) return toast(r.error ?? 'Could not remove content.', 'error');
+    const resolved = await actions.resolveReport(report.id, 'actioned');
+    toast(
+      resolved.ok ? 'Content removed.' : resolved.error ?? 'Content removed, but the report could not be resolved.',
+      resolved.ok ? 'success' : 'error',
+    );
   }
 
   async function toggleSuspend(report: Report) {

@@ -38,11 +38,12 @@ export default function MessageThread() {
   const sharedPostId = shareParam?.startsWith('post:') ? shareParam.slice(5) : null;
   const sharedPost = sharedPostId ? state.posts.find((p) => p.id === sharedPostId && !p.deletedAt) : null;
 
-  // Opening the thread marks incoming messages read (NOT-2 equivalent for DMs).
+  // Opening the thread marks incoming messages read; messages that arrive
+  // while it's open are stamped on arrival too.
   useEffect(() => {
     if (isMember && id) void actions.markConversationRead(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, isMember]);
+  }, [id, isMember, messages.length]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' });
@@ -50,6 +51,8 @@ export default function MessageThread() {
 
   if (!me) return null;
   if (!isMember || !other) {
+    // Hydration hasn't landed yet — show the skeleton, not a false "no access".
+    if (!ready) return <ChatSkeleton />;
     return (
       <div className="card p-8 text-center">
         <h1 className="text-lg font-bold">Conversation unavailable</h1>

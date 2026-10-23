@@ -10,6 +10,8 @@ interface Props {
   label?: string;
   /** Long-edge resize target — avatars pass `LIMITS.avatarMaxEdgePx` (IMG-03). */
   maxEdge?: number;
+  /** Post-compress/upload cap for this bucket (avatars: 1 MB, posts: 2 MB). */
+  compressedMaxBytes?: number;
 }
 
 /**
@@ -27,6 +29,7 @@ export default function ImageUploader({
   max = LIMITS.imagesPerPost,
   label = 'Add photos',
   maxEdge,
+  compressedMaxBytes = LIMITS.imageMaxPostCompressBytes,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +40,7 @@ export default function ImageUploader({
 
   /** Cap applied to the picked file: pre-compress limit, or the hard upload
    *  cap when the user opted out of compression. */
-  const capBytes = compress ? LIMITS.imageMaxBytes : LIMITS.imageMaxPostCompressBytes;
+  const capBytes = compress ? LIMITS.imageMaxBytes : compressedMaxBytes;
 
   async function handleFiles(files: FileList | null) {
     if (!files?.length) return;
@@ -69,7 +72,10 @@ export default function ImageUploader({
         setBusy({ done: i, total: list.length, name: file.name });
         try {
           if (compress) {
-            const out = await compressImage(file, maxEdge ? { maxEdge } : {});
+            const out = await compressImage(file, {
+              ...(maxEdge ? { maxEdge } : {}),
+              maxCompressedBytes: compressedMaxBytes,
+            });
             picked.push(out.dataUrl);
             setNotes((n) => [...n, `${file.name}: ${formatBytes(out.beforeBytes)} → ${formatBytes(out.afterBytes)}`]);
           } else {
@@ -150,7 +156,7 @@ export default function ImageUploader({
       <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <p className="text-[11px] text-slate-500">
           JPG, PNG or WebP · max {formatBytes(LIMITS.imageMaxBytes)} per image
-          {!compress && ` · capped at ${formatBytes(LIMITS.imageMaxPostCompressBytes)} uncompressed`}
+          {!compress && ` · capped at ${formatBytes(compressedMaxBytes)} uncompressed`}
         </p>
         <label className="flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-slate-600">
           <input

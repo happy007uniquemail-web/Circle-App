@@ -68,10 +68,11 @@ export function readAsDataUrl(file: Blob): Promise<string> {
  */
 export async function compressImage(
   file: File,
-  opts: { maxEdge?: number; maxBytes?: number } = {},
+  opts: { maxEdge?: number; maxBytes?: number; maxCompressedBytes?: number } = {},
 ): Promise<CompressedImage> {
   const maxEdge = opts.maxEdge ?? LIMITS.imageMaxEdgePx;
   const maxBytes = opts.maxBytes ?? LIMITS.imageMaxBytes;
+  const maxCompressedBytes = opts.maxCompressedBytes ?? LIMITS.imageMaxPostCompressBytes;
 
   if (file.size > maxBytes) {
     throw new Error(`Images must be ${formatBytes(maxBytes)} or smaller.`);
@@ -103,14 +104,12 @@ export async function compressImage(
 
     // Hard cap after compression (IMG-05): step the quality down, give up
     // with a clear message rather than uploading an oversized object.
-    while (blob.size > LIMITS.imageMaxPostCompressBytes && quality > 0.35) {
+    while (blob.size > maxCompressedBytes && quality > 0.35) {
       quality = Math.max(0.3, quality - 0.2);
       const smaller = await toBlob(canvas, blob.type || 'image/jpeg', quality);
       if (smaller && smaller.size < blob.size) blob = smaller;
     }
-    if (blob.size > (opts.maxEdge === LIMITS.avatarMaxEdgePx
-      ? LIMITS.avatarMaxPostCompressBytes
-      : LIMITS.imageMaxPostCompressBytes)) {
+    if (blob.size > maxCompressedBytes) {
       throw new Error('That image stays over the size limit even after compression — try a different photo.');
     }
 

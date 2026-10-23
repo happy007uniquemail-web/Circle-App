@@ -47,7 +47,7 @@ import { LIMITS } from '../types';
 import { avatarFor, countLinks, extractHashtags, svgImage } from './format';
 import { deleteVideo } from './media';
 import { checkLimit } from './rateLimit';
-import { friendlyError, supabase, deleteMediaUrls, uploadImages, uploadRef } from './supabase';
+import { friendlyError, realBackend, supabase, deleteMediaUrls, uploadImages, uploadRef } from './supabase';
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 
 export type { Result };
@@ -2743,14 +2743,20 @@ class SupabaseProvider implements DataProvider {
 
     const current = this.me();
     const updated: Profile = {
-      id: meId,
+      ...(current ?? {
+        id: meId,
+        username: '',
+        displayName,
+        bio: '',
+        avatarUrl: '',
+        role: 'user' as const,
+        isSuspended: false,
+        createdAt: now(),
+      }),
       username: input.username,
       displayName,
       bio,
       avatarUrl: avatarUrl || current?.avatarUrl || '',
-      role: current?.role ?? 'user',
-      isSuspended: current?.isSuspended ?? false,
-      createdAt: current?.createdAt ?? now(),
     };
     this.commit({
       profiles: current ? this.state.profiles.map((p) => (p.id === meId ? updated : p)) : [...this.state.profiles, updated],
@@ -3529,43 +3535,46 @@ class SupabaseProvider implements DataProvider {
   async updateCabin(cabinId: string, patch: Partial<CabinInput>): Promise<Result> {
     const guard = this.requireAuth();
     if (!guard.ok) return guard;
+    if (!canModerateCabin(this.state, cabinId, this.state.session!.id)) {
+      return { ok: false, error: 'Only the owner or an admin can edit this cabin.' };
+    }
     const before = this.state;
     const cabin = cabinById(this.state, cabinId);
     if (!cabin) return { ok: false, error: 'Cabin not found.' };
     const db: Record<string, unknown> = {};
     let imageUrl = cabin.imageUrl;
-    if (patch.imageUrl !== undefined) {
-      // Fresh picks arrive as data URLs; unchanged covers stay remote URLs.
-      imageUrl = patch.imageUrl;
-      if (patch.imageUrl && patch.imageUrl.startsWith('data:')) {
-        imageUrl = await uploadRef(patch.imageUrl, 'post-images', this.state.session!.id);
-      }
-      db.image_url = imageUrl;
-    }
-    if (patch.name !== undefined) db.name = patch.name.trim();
-    if (patch.description !== undefined) db.description = patch.description?.trim() || null;
-    if (patch.type !== undefined) db.type = patch.type;
-    this.commit({
-      cabins: (this.state.cabins ?? []).map((c) =>
-        c.id === cabinId
-          ? {
-              ...c,
-              name: patch.name !== undefined ? patch.name.trim() : c.name,
-              description: patch.description !== undefined ? patch.description?.trim() || null : c.description,
-              imageUrl,
-              type: patch.type !== undefined ? patch.type : c.type,
-            }
-          : c,
-      ),
-      cabinInterests:
-        patch.interestIds !== undefined
-          ? [
-              ...[...new Set(patch.interestIds)].map((interestId) => ({ cabinId, interestId })),
-              ...(this.state.cabinInterests ?? []).filter((ci) => ci.cabinId !== cabinId),
-            ]
-          : this.state.cabinInterests,
-    });
     try {
+      if (patch.imageUrl !== undefined) {
+        // Fresh picks arrive as data URLs; unchanged covers stay remote URLs.
+        imageUrl = patch.imageUrl;
+        if (patch.imageUrl && patch.imageUrl.startsWith('data:')) {
+          imageUrl = await uploadRef(patch.imageUrl, 'post-images', this.state.session!.id);
+        }
+        db.image_url = imageUrl;
+      }
+      if (patch.name !== undefined) db.name = patch.name.trim();
+      if (patch.description !== undefined) db.description = patch.description?.trim() || null;
+      if (patch.type !== undefined) db.type = patch.type;
+      this.commit({
+        cabins: (this.state.cabins ?? []).map((c) =>
+          c.id === cabinId
+            ? {
+                ...c,
+                name: patch.name !== undefined ? patch.name.trim() : c.name,
+                description: patch.description !== undefined ? patch.description?.trim() || null : c.description,
+                imageUrl,
+                type: patch.type !== undefined ? patch.type : c.type,
+              }
+            : c,
+        ),
+        cabinInterests:
+          patch.interestIds !== undefined
+            ? [
+                ...[...new Set(patch.interestIds)].map((interestId) => ({ cabinId, interestId })),
+                ...(this.state.cabinInterests ?? []).filter((ci) => ci.cabinId !== cabinId),
+              ]
+            : this.state.cabinInterests,
+      });
       if (Object.keys(db).length) {
         const { error } = await this.sb.from('cabins').update(db).eq('id', cabinId);
         if (error) throw error;
@@ -3993,7 +4002,7 @@ class SupabaseProvider implements DataProvider {
 /* ----------------------------------------------------------------- react */
 
 /** Offline demo provider; the live Supabase provider when env credentials exist. */
-export const provider: DataProvider = new SupabaseProvider(supabase!);
+export const provider: DataProvider = realBackend && supabase ? new SupabaseProvider(supabase) : new DemoProvider();
 
 // Dev hook: lets e2e/debug tooling exercise the data layer directly.
 if (import.meta.env.DEV && typeof window !== 'undefined') {

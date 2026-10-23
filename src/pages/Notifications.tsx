@@ -6,7 +6,7 @@ import Avatar from '../components/Avatar';
 import { ListSkeleton } from '../components/Skeleton';
 import { toast } from '../components/Toast';
 import { timeAgo } from '../lib/format';
-import { profileById, selectNotifications, useActions, useAppState, useDataReady } from '../lib/store';
+import { pendingRequest, profileById, selectNotifications, useActions, useAppState, useDataReady } from '../lib/store';
 import type { AppNotification } from '../types';
 
 const ICONS: Record<string, { Icon: typeof Heart; cls: string }> = {
@@ -113,7 +113,8 @@ export default function Notifications() {
 
     // PRV-03: follow requests are actionable inline — approve or decline
     // without leaving the page (the profile page has the same controls).
-    if (n.type === 'follow_request') {
+    // Once decided, the row stays as a plain notification (no stale buttons).
+    if (n.type === 'follow_request' && me && pendingRequest(state, me, n.actorId)) {
       return (
         <div
           key={n.id}
