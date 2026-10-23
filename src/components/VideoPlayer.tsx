@@ -53,6 +53,7 @@ export default function VideoPlayer({ refKey, className = '', poster = true, dow
         controls
         preload="metadata"
         playsInline
+        muted
         aria-label={label}
         className={`${width} rounded-xl border border-border-subtle bg-black ${className}`}
       />

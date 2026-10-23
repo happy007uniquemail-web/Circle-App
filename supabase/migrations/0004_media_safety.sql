@@ -66,6 +66,21 @@ create or replace view public.user_storage_usage as
 
 grant select on public.user_storage_usage to authenticated;
 
+-- QTA-05: global storage usage monitoring — total bytes across all users.
+-- Used by admins to monitor plan capacity; alert at 70% / 90% of plan limit.
+create or replace view public.total_storage_usage as
+  select sum(coalesce((metadata->>'size')::bigint, 0))::bigint as total_bytes,
+         count(*)::bigint                             as object_count
+  from storage.objects;
+
+grant select on public.total_storage_usage to authenticated;
+
+-- Helper: true when a user's stored bytes exceed p_percent of their quota.
+create or replace function public.circle_user_is_near_quota(p_uid uuid, p_percent numeric)
+returns boolean language sql stable security definer set search_path = public as $$
+  select public.circle_user_storage_bytes(p_uid) >= (524288000 * p_percent / 100);
+$$;
+
 -- =========================================================================
 -- 3. Rewrite the three owner-write policies: explicit MIME whitelist
 --    (fixes F-S1: pg_input_is_valid(...,'mime') only checked syntax) +
