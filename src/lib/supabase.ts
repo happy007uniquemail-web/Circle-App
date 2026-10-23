@@ -17,10 +17,8 @@ import { getVideoUrl } from './media';
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
-/** Real credentials present (template placeholders like `<project-ref>` do not count). */
-export const realBackend: boolean = Boolean(
-  url && anon && url.startsWith('https://') && !url.includes('<'),
-);
+/** Always true — the app runs in official Supabase mode only. */
+export const realBackend: boolean = true;
 
 export const supabase: SupabaseClient | null = realBackend
   ? createClient(url!, anon!, {

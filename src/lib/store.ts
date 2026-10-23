@@ -47,7 +47,7 @@ import { LIMITS } from '../types';
 import { avatarFor, countLinks, extractHashtags, svgImage } from './format';
 import { deleteVideo } from './media';
 import { checkLimit } from './rateLimit';
-import { friendlyError, realBackend, supabase, deleteMediaUrls, uploadImages, uploadRef } from './supabase';
+import { friendlyError, supabase, deleteMediaUrls, uploadImages, uploadRef } from './supabase';
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 
 export type { Result };
@@ -3993,7 +3993,7 @@ class SupabaseProvider implements DataProvider {
 /* ----------------------------------------------------------------- react */
 
 /** Offline demo provider; the live Supabase provider when env credentials exist. */
-export const provider: DataProvider = realBackend && supabase ? new SupabaseProvider(supabase) : new DemoProvider();
+export const provider: DataProvider = new SupabaseProvider(supabase!);
 
 // Dev hook: lets e2e/debug tooling exercise the data layer directly.
 if (import.meta.env.DEV && typeof window !== 'undefined') {
