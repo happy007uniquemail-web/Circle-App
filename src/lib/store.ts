@@ -43,7 +43,6 @@ import type {
 } from '../types';
 import { LIMITS } from '../types';
 import { countLinks, extractHashtags } from './format';
-import { checkLimit } from './rateLimit';
 import { friendlyError, supabase, deleteMediaUrls, uploadImages, uploadRef } from './supabase';
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 
@@ -1155,7 +1154,6 @@ class SupabaseProvider implements DataProvider {
   async createPost(body: string, imageUrls: string[], videoUrl: string | null = null): Promise<Result> {
     const guard = this.requireActive();
     if (!guard.ok) return guard;
-    if (!checkLimit('post', 5, 10 * 60_000)) return { ok: false, error: 'Slow down — posting limit reached (5 per 10 min).' };
     const text = body.trim();
     if (text.length > LIMITS.postMax) return { ok: false, error: `Posts must be ${LIMITS.postMax} characters or fewer.` };
     if (!text && !imageUrls.length && !videoUrl) return { ok: false, error: 'Posts need text, a photo, or a video.' };
@@ -1265,7 +1263,6 @@ class SupabaseProvider implements DataProvider {
   async addComment(postId: string, body: string, imageUrls: string[] = []): Promise<Result> {
     const guard = this.requireActive();
     if (!guard.ok) return guard;
-    if (!checkLimit('comment', 20, 10 * 60_000)) return { ok: false, error: 'Slow down — commenting limit reached.' };
     const meId = this.state.session!.id;
     const post = this.state.posts.find((p) => p.id === postId && !p.deletedAt);
     if (!post) return { ok: false, error: 'Post not found.' };
@@ -1398,8 +1395,6 @@ class SupabaseProvider implements DataProvider {
     if (isBlockedPair(this.state, meId, userId)) return { ok: false, error: 'You cannot follow this user.' };
     const target = profileById(this.state, userId);
     if (!target?.username) return { ok: false, error: 'Profile not found.' };
-    if (!checkLimit('follow', 30, 10 * 60_000)) return { ok: false, error: 'Slow down — follow limit reached.' };
-
     const existing = this.state.follows.find((f) => f.followerId === meId && f.followingId === userId);
     const before = this.state;
     if (existing) {
@@ -1687,7 +1682,6 @@ class SupabaseProvider implements DataProvider {
   async createStory(input: StoryInput): Promise<Result> {
     const guard = this.requireActive();
     if (!guard.ok) return guard;
-    if (!checkLimit('story', 10, 60 * 60_000)) return { ok: false, error: 'Story limit reached (10 per hour).' };
     const caption = input.caption.trim().slice(0, LIMITS.storyCaptionMax);
     if (input.kind === 'text' && !caption) return { ok: false, error: 'Text stories need a caption.' };
     if (input.kind !== 'text' && !input.media) return { ok: false, error: 'Pick a photo or video first.' };
@@ -1777,7 +1771,6 @@ class SupabaseProvider implements DataProvider {
     const meId = this.state.session!.id;
     const conv = this.state.conversations.find((c) => c.id === conversationId);
     if (!conv || !conv.memberIds.includes(meId)) return { ok: false, error: 'This conversation is not available.' };
-    if (!checkLimit('dm', 20, 10 * 60_000)) return { ok: false, error: 'Slow down — messaging limit reached (20 per 10 min).' };
 
     const otherId = conv.memberIds.find((m) => m !== meId)!;
     if (isBlockedPair(this.state, meId, otherId)) return { ok: false, error: 'You cannot message a blocked user.' };
