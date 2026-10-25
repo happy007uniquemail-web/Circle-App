@@ -37,7 +37,15 @@ export default function Onboarding() {
     return { kind: 'ok' as const, msg: `${u} is available` };
   }, [username, state.profiles, me?.id]);
 
-  if (!me) return null;
+  // While hydration is in flight (or until the profile row lands, e.g. after
+  // the 0010 backfill) show a spinner — never a blank page.
+  if (!me) {
+    return (
+      <div className="grid min-h-dvh place-items-center" role="status" aria-label="Loading">
+        <span className="h-7 w-7 animate-spin rounded-full border-[3px] border-brand-200 border-t-brand-600" />
+      </div>
+    );
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();

@@ -1086,13 +1086,21 @@ class SupabaseProvider implements DataProvider {
     }
     const displayName = input.displayName.trim();
     const bio = input.bio.trim();
-    const { error } = await this.sb
-      .from('profiles')
-      .update({ username: input.username, display_name: displayName, bio, avatar_url: avatarUrl || null })
-      .eq('id', meId);
+    const current = this.me();
+    // Self-heal: when the profiles row is missing (user signed in before the
+    // migrations ran, so the signup trigger never fired), an UPDATE would
+    // affect 0 rows and silently "succeed" — leaving onboarding on an
+    // infinite loop. Upsert the row instead (0010 allows owner inserts).
+    const { error } = current
+      ? await this.sb
+          .from('profiles')
+          .update({ username: input.username, display_name: displayName, bio, avatar_url: avatarUrl || null })
+          .eq('id', meId)
+      : await this.sb
+          .from('profiles')
+          .upsert({ id: meId, username: input.username, display_name: displayName, bio, avatar_url: avatarUrl || null });
     if (error) return { ok: false, error: friendlyError(error) };
 
-    const current = this.me();
     const updated: Profile = {
       ...(current ?? {
         id: meId,
