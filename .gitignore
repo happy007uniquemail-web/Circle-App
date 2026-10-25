@@ -6,3 +6,9 @@ dist/
 !.env.example
 .DS_Store
 *.log
+.netlify/
+portfolio-nextjs/
+app/
+src/components/forms/
+src/lib/email.ts
+src/lib/validations.ts
