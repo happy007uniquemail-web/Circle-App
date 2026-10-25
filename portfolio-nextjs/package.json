@@ -1,0 +1,52 @@
+/**
+ * package.json for the portfolio Next.js project
+ */
+
+{
+  "name": "portfolio-nextjs",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:ui": "vitest run --ui"
+  },
+  "dependencies": {
+    "next": "^15.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.6.3",
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.1",
+    "eslint": "^9.15.0",
+    "eslint-plugin-react": "^7.37.2",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "postcss": "^8.5.0",
+    "prettier": "^3.3.3",
+    "prettier-plugin-tailwindcss": "^0.6.8",
+    "tailwindcss-animate": "^1.0.7",
+    "vitest": "^2.1.4",
+    "@testing-library/react": "^16.0.1",
+    "@types/react-hook-form": "^7.4.7",
+    "react-hook-form": "^7.53.0",
+    "@hookform/resolvers": "^3.9.0",
+    "zod": "^3.23.8",
+    "upstash-redis": "^1.30.2",
+    "@upstash/ratelimit": "^2.3.0",
+    "resend": "^3.2.0",
+    "cloudflare-turnstile": "^1.1.0",
+    "lucide-react": "^0.454.0",
+    "next-themes": "^0.4.4",
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

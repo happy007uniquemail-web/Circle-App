@@ -92,7 +92,7 @@ create policy "avatars_owner_write"
   with check (
     bucket_id = 'avatars'
     and (storage.foldername(name))[1] = auth.uid()::text
-    and coalesce(content_type, '') in ('image/jpeg','image/png','image/webp')
+    and coalesce(metadata->>'mimetype', '') in ('image/jpeg','image/png','image/webp')
     and public.circle_can_upload(auth.uid())
   );
 
@@ -102,7 +102,7 @@ create policy "post_images_owner_write"
   with check (
     bucket_id = 'post-images'
     and (storage.foldername(name))[1] = auth.uid()::text
-    and coalesce(content_type, '') in ('image/jpeg','image/png','image/webp')
+    and coalesce(metadata->>'mimetype', '') in ('image/jpeg','image/png','image/webp')
     and public.circle_can_upload(auth.uid())
   );
 
@@ -112,7 +112,7 @@ create policy "media_owner_write"
   with check (
     bucket_id = 'media'
     and (storage.foldername(name))[1] = auth.uid()::text
-    and coalesce(content_type, '') in ('video/mp4','video/webm','video/quicktime')
+    and coalesce(metadata->>'mimetype', '') in ('video/mp4','video/webm','video/quicktime')
     and public.circle_can_upload(auth.uid())
   );
 

@@ -368,7 +368,7 @@ create policy "post_images_owner_write"
   with check (
     bucket_id = 'post-images'
     and (storage.foldername(name))[1] = auth.uid()::text
-    and pg_input_is_valid(coalesce(content_type, ''), 'mime')  -- image MIME types only
+    and pg_input_is_valid(coalesce(metadata->>'mimetype', ''), 'mime')  -- image MIME types only
   );
 create policy "post_images_owner_delete"
   on storage.objects for delete to authenticated

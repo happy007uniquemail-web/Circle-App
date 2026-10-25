@@ -348,7 +348,7 @@ create policy "media_owner_write"
   with check (
     bucket_id = 'media'
     and (storage.foldername(name))[1] = auth.uid()::text
-    and coalesce(content_type, '') in ('video/mp4', 'video/webm', 'video/quicktime')
+    and coalesce(metadata->>'mimetype', '') in ('video/mp4', 'video/webm', 'video/quicktime')
   );
 create policy "media_owner_delete"
   on storage.objects for delete to authenticated
