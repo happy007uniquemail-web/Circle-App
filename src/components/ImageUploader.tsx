@@ -133,7 +133,7 @@ export default function ImageUploader({
                 ? `Compressing photo ${busy.done + 1}/${busy.total}`
                 : `Add photos — ${value.length}/${max} selected`
             }
-            className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-white/20 text-slate-500 hover:border-brand-500 hover:text-brand-600 disabled:opacity-60"
+            className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border-subtle text-txt-subtle hover:border-brand-500 hover:text-brand-600 disabled:opacity-60"
           >
             {busy ? <Loader2 size={18} className="animate-spin" /> : <ImagePlus size={18} />}
             <span className="text-[10px] font-medium">

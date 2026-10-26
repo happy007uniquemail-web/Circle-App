@@ -6,9 +6,12 @@ import {
   Home,
   LogOut,
   MessageCircle,
+  Monitor,
+  Moon,
   Plus,
   Settings,
   Shield,
+  Sun,
   Tent,
   User as UserIcon,
   Users,
@@ -26,6 +29,7 @@ import SearchBox from './SearchBox';
 import SidePanel from './SidePanel';
 import { Toaster, toast } from './Toast';
 import { useOnlineStatus } from '../lib/hooks';
+import { loadUiPrefs, saveUiPrefs, type ThemeMode } from '../lib/uiPrefs';
 import {
   currentUserProfile,
   totalCabinUnread,
@@ -334,6 +338,7 @@ export default function Layout() {
                   {me.role === 'admin' && (
                     <MenuLink to="/admin/reports" icon={<Shield size={15} />} label="Moderation queue" />
                   )}
+                  <ThemeQuickRow />
                   <button
                     onClick={signOut}
                     className="flex min-h-11 w-full items-center gap-2 px-4 py-2.5 text-sm text-txt-muted hover:bg-hover-wash"
@@ -476,5 +481,50 @@ function MenuLink({ to, icon, label }: { to: string; icon: ReactNode; label: str
     >
       {icon} {label}
     </NavLink>
+  );
+}
+
+/** THM-01: Light / Dark / System quick switch inside the account menu. */
+function ThemeQuickRow() {
+  const [, bump] = useState(0); // re-render reads the fresh localStorage value
+  const active: ThemeMode = loadUiPrefs().theme;
+
+  function pick(e: React.MouseEvent, mode: ThemeMode) {
+    e.stopPropagation(); // keep the menu open so modes can be previewed
+    saveUiPrefs({ theme: mode });
+    bump((n) => n + 1);
+  }
+
+  const options = [
+    { mode: 'light', label: 'Light theme', Icon: Sun },
+    { mode: 'dark', label: 'Dark theme', Icon: Moon },
+    { mode: 'system', label: 'Follow system theme', Icon: Monitor },
+  ] as const;
+
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      className="flex items-center justify-between gap-2 border-b border-border-subtle px-4 py-2.5"
+    >
+      <span className="flex items-center gap-2 text-xs font-semibold text-txt-muted">
+        <Sun size={13} aria-hidden /> Theme
+      </span>
+      <div role="radiogroup" aria-label="Quick theme switch" className="flex gap-1">
+        {options.map(({ mode, label, Icon }) => (
+          <button
+            key={mode}
+            role="radio"
+            aria-checked={active === mode}
+            aria-label={label}
+            onClick={(e) => pick(e, mode)}
+            className={`tap44 rounded-lg p-1.5 transition ${
+              active === mode ? 'bg-brand-600 text-white' : 'text-txt-subtle hover:bg-hover-wash'
+            }`}
+          >
+            <Icon size={14} />
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }

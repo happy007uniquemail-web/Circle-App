@@ -1,13 +1,60 @@
 import { useState, type FormEvent } from 'react';
-import { LogOut, Trash2 } from 'lucide-react';
+import { LogOut, Monitor, Moon, Sun, Trash2, type LucideIcon } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import Avatar from '../components/Avatar';
 import ImageUploader from '../components/ImageUploader';
 import InterestPicker from '../components/InterestPicker';
 import { toast } from '../components/Toast';
 import { avatarFor, isValidUsername, timeAgo } from '../lib/format';
+import { loadUiPrefs, saveUiPrefs, type ThemeMode } from '../lib/uiPrefs';
 import { blockedIdsFor, currentUserProfile, interestsOf, profileById, useActions, useAppState } from '../lib/store';
 import { LIMITS } from '../types';
+
+/** Theme modes (THM-01): applied instantly via saveUiPrefs — no reload. */
+const THEME_OPTIONS: ReadonlyArray<{ value: ThemeMode; label: string; hint: string; Icon: LucideIcon }> = [
+  { value: 'light', label: 'Light', hint: 'Bright & clean', Icon: Sun },
+  { value: 'dark', label: 'Dark', hint: 'Easy at night', Icon: Moon },
+  { value: 'system', label: 'System', hint: 'Match device', Icon: Monitor },
+];
+
+/** Appearance/preferences card: Light / Dark / System segmented control. */
+function AppearanceCard() {
+  // The active mode lives in localStorage; reading it directly keeps the
+  // highlight correct even if the account menu's quick picker changed it.
+  const [, bump] = useState(0);
+  const theme = loadUiPrefs().theme;
+
+  function pick(next: ThemeMode) {
+    saveUiPrefs({ theme: next }); // flips data-theme on <html> instantly
+    bump((n) => n + 1);
+  }
+
+  return (
+    <section className="card p-5" aria-labelledby="settings-appearance">
+      <h2 id="settings-appearance" className="font-semibold">Appearance</h2>
+      <p className="mt-1 text-sm text-slate-500">
+        Choose Light or Dark, or let Circle follow your device — System updates automatically when your phone switches day/night.
+      </p>
+      <div role="radiogroup" aria-label="Theme" className="mt-3 grid grid-cols-3 gap-2">
+        {THEME_OPTIONS.map(({ value, label, hint, Icon }) => (
+          <button
+            key={value}
+            role="radio"
+            aria-checked={theme === value}
+            onClick={() => pick(value)}
+            className={`flex min-h-11 flex-col items-center gap-1 rounded-xl border p-3 text-center transition ${
+              theme === value ? 'border-brand-500 bg-brand-50' : 'border-border-subtle hover:border-brand-400'
+            }`}
+          >
+            <Icon size={18} className={theme === value ? 'text-brand-600' : 'text-txt-subtle'} aria-hidden />
+            <span className="text-sm font-semibold">{label}</span>
+            <span className="text-[11px] text-slate-500">{hint}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 /** Mute categories (NOT-09): one switch per family; notify() honours the individual types. */
 const NOTIF_CATEGORIES: ReadonlyArray<{ types: string[]; label: string; hint: string }> = [
@@ -131,6 +178,8 @@ export default function Settings() {
           <button type="submit" className="btn-primary">Save changes</button>
         </form>
       </section>
+
+      <AppearanceCard />
 
       {/* INT-05: interests panel — every toggle saves instantly. */}
       <section className="card p-5" aria-labelledby="settings-interests">

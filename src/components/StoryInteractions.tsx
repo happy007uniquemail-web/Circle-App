@@ -115,21 +115,21 @@ export function StoryActionBar({
           onClick={() => void react(HEART)}
           aria-pressed={hearted}
           aria-label={hearted ? `Unlike story (${heartCount})` : `Like story (${heartCount})`}
-          className={`flex min-h-10 items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold shadow transition ${hearted ? 'bg-rose-500 text-white' : 'bg-white/90 text-rose-600 hover:bg-white'}`}
+          className={`flex min-h-10 items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold shadow backdrop-blur transition ${hearted ? 'bg-rose-500 text-white' : 'bg-black/45 text-white hover:bg-black/65'}`}
         >
           <Heart size={16} fill={hearted ? 'currentColor' : 'none'} /> {heartCount}
         </button>
         <button
           onClick={() => void replyInDm()}
           disabled={busy}
-          className="flex min-h-10 items-center gap-1.5 rounded-full bg-white/90 px-3.5 text-sm font-semibold text-[#0F1B2D] shadow transition hover:bg-white"
+          className="flex min-h-10 items-center gap-1.5 rounded-full bg-black/45 px-3.5 text-sm font-semibold text-white shadow backdrop-blur transition hover:bg-black/65"
         >
           <MessageCircle size={16} /> Reply
         </button>
         <button
           onClick={openComments}
           aria-label={`Comment on story (${comments.length})`}
-          className="flex min-h-10 items-center gap-1.5 rounded-full bg-white/90 px-3.5 text-sm font-semibold text-[#0F1B2D] shadow transition hover:bg-white"
+          className="flex min-h-10 items-center gap-1.5 rounded-full bg-black/45 px-3.5 text-sm font-semibold text-white shadow backdrop-blur transition hover:bg-black/65"
         >
           💬 {comments.length}
         </button>
@@ -137,7 +137,7 @@ export function StoryActionBar({
           onClick={() => void repost()}
           aria-pressed={reposted}
           aria-label={reposted ? 'Reposted to your story' : 'Repost to your story'}
-          className={`flex min-h-10 items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold shadow transition ${reposted ? 'bg-[#5FBB70] text-white' : 'bg-white/90 text-[#0F1B2D] hover:bg-white'}`}
+          className={`flex min-h-10 items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold shadow backdrop-blur transition ${reposted ? 'bg-[#5FBB70] text-white' : 'bg-black/45 text-white hover:bg-black/65'}`}
         >
           <Repeat2 size={16} /> {reposted ? 'Reposted' : 'Repost'}
         </button>
