@@ -182,8 +182,13 @@ export default function Notifications() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-bold">Notifications</h1>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h1 className="text-lg font-bold">Activity</h1>
+          <p className="text-xs text-slate-500">
+            Everything that happened to you on Circle — follows, likes, comments, story reactions, reposts and cabins.
+          </p>
+        </div>
         <button onClick={() => void actions.markNotificationsRead()} className="btn-ghost text-xs">
           Mark all as read
         </button>
@@ -193,7 +198,7 @@ export default function Notifications() {
         <ListSkeleton n={4} />
       ) : items.length === 0 ? (
         <div className="card p-8 text-center">
-          <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-brand-50 text-brand-600">
+          <div className="mx-auto grid h-12 w-12 place-items-center rounded-full grad-brand text-white shadow-md">
             <Bell size={22} aria-hidden />
           </div>
           <h2 className="mt-3 font-semibold">Nothing yet</h2>
@@ -204,7 +209,9 @@ export default function Notifications() {
         <div className="space-y-5">
           {today.length > 0 && (
             <section aria-label="Today">
-              <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Today</h2>
+              <h2 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-500">
+                <span aria-hidden className="grad-brand h-1.5 w-1.5 rounded-full" /> Today
+              </h2>
               {/* AnimatedList prepends, so feed oldest-first for newest-on-top. */}
               <AnimatedList className="w-full gap-2" role="list" delay={120}>
                 {today.slice(0, limit).reverse().map(renderRow)}
@@ -213,7 +220,9 @@ export default function Notifications() {
           )}
           {earlier.length > 0 && (
             <section aria-label="Earlier">
-              <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Earlier</h2>
+              <h2 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-500">
+                <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-slate-300" /> Earlier
+              </h2>
               <AnimatedList className="w-full gap-2" role="list" delay={120}>
                 {earlier.slice(0, Math.max(0, limit - today.length)).reverse().map(renderRow)}
               </AnimatedList>

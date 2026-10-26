@@ -307,6 +307,78 @@ body::before {
     -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
     backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   }
+
+  /* ── Circle brand chrome (refinement pass) ─────────────────────────
+     Orange/red/green from the logo, tokenized in tokens.css so light and
+     dark tune their own stops. ─────────────────────────────────────── */
+
+  /* Gradient fill carrying white text (active tabs, badges, small marks). */
+  .grad-brand {
+    background-image: var(--brand-strong-grad);
+  }
+  /* Decorative nav-strip tint over the glass (both chrome rows). */
+  .brand-wash {
+    background-image: var(--brand-wash);
+  }
+  /* Brighter band for the whole upper header (logo + search + tabs row). */
+  .brand-wash-strong {
+    background-image: var(--brand-wash-strong);
+  }
+
+  /* Circular brand ring around author avatars — "Circle" identity. */
+  .ring-brand {
+    display: inline-block;
+    padding: 2px;
+    border-radius: 9999px;
+    background: conic-gradient(from 210deg, var(--brand-orange), var(--brand-red), var(--brand-cream), var(--brand-green), var(--brand-orange));
+  }
+  .ring-brand > * {
+    border-radius: 9999px;
+  }
+
+  /* Angular post card: pentagon-cut silhouette with a brand-gradient
+     hairline. The outer element clips + paints the hairline; the inner
+     surface re-clips so content sits on opaque fill. Cut corners are
+     top-left / bottom-right so the top-right post menu and the bottom-left
+     tap targets stay clear of the diagonals. */
+  .cut-card {
+    position: relative;
+    padding: 1px;
+    clip-path: polygon(20px 0, 100% 0, 100% 100%, 0 100%, 0 20px);
+    background-image: var(--card-hairline);
+    transition: filter 0.15s ease;
+  }
+  .cut-card:hover {
+    filter: brightness(1.02);
+  }
+  .cut-card > .cut-inner {
+    position: relative;
+    clip-path: polygon(20px 0, 100% 0, 100% 100%, 0 100%, 0 20px);
+    background: var(--surface);
+  }
+  /* In-card dropdown (post ⋯ menu) would be clipped by the silhouette while
+     open — square the card off for its lifetime; other overlays portal out. */
+  .cut-card.menu-open,
+  .cut-card.menu-open > .cut-inner {
+    clip-path: none;
+  }
+
+  /* Circular arc motif peeking out of the card's top-right corner — the
+     counterpoint to the angular silhouette, strongest in dark mode. */
+  .post-arc::after {
+    content: '';
+    position: absolute;
+    top: -34px;
+    right: -34px;
+    width: 104px;
+    height: 104px;
+    border-radius: 50%;
+    border: 12px solid transparent;
+    border-top-color: var(--arc-a);
+    border-right-color: var(--arc-b);
+    transform: rotate(45deg);
+    pointer-events: none;
+  }
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {

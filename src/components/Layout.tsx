@@ -248,15 +248,16 @@ export default function Layout() {
       {/* The single glass "window" over the wallpaper (§5.1): full-bleed with
           no radius below 1200px (mobile/tablet), centred with margins at wide. */}
       <div className="glass relative mx-auto flex min-h-0 w-full max-w-[var(--panel-max)] flex-1 flex-col rounded-none border-0 pt-[env(safe-area-inset-top)] wide:rounded-3xl wide:border">
-        {/* ── Top bar (§6.2) ────────────────────────────────────────────── */}
+        {/* ── Top bar (§6.2) — brand wash: brighter band behind logo/search,
+               slightly tinted strip behind the wide desktop feed tabs ───── */}
         <header className="glass-bar z-40 flex-none border-b border-border-subtle wide:rounded-t-3xl">
-          <div className="relative flex h-[var(--topbar-h)] items-center gap-2 px-3 md:px-4">
+          <div className="brand-wash-strong relative flex h-[var(--topbar-h)] items-center gap-2 px-3 md:px-4">
             <Brand />
 
             {/* TOP-01 text tabs sit between brand and search — desktop only
                 (§5.1). Below 1200px the row can't fit them without overlapping
                 the search pill, so the pill tabs in row 2 carry them instead. */}
-            <div className="mx-1 hidden min-w-0 flex-1 wide:block">
+            <div className="brand-wash mx-1 hidden min-w-0 flex-1 rounded-full wide:block">
               <FeedTabs />
             </div>
 
@@ -352,8 +353,9 @@ export default function Layout() {
 
           {/* Row 2 below 1200px (§5.2): horizontally scrollable feed pills +
               filter — the only home for both between 768–1199px, where row 1
-              has no room left for them (TOP-04 no overlap). */}
-          <div className="flex items-center gap-2 px-3 pb-2 wide:hidden">
+              has no room left for them (TOP-04 no overlap). Brand-wash strip
+              so the nav reads as the same colourful band on every width. */}
+          <div className="brand-wash flex items-center gap-2 px-3 pb-2 wide:hidden">
             <FeedTabs variant="pills" className="flex-1" />
             <FeedFilter className="shrink-0" />
           </div>

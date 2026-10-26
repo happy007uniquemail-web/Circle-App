@@ -81,7 +81,7 @@ export default function FeedTabs({
           >
             {label}
             {active === id && (
-              <span aria-hidden className="absolute inset-x-3 bottom-0.5 h-1 rounded-full bg-accent-primary" />
+              <span aria-hidden className="grad-brand absolute inset-x-3 bottom-0.5 h-1 rounded-full" />
             )}
           </button>
         ) : (
@@ -93,7 +93,7 @@ export default function FeedTabs({
             onClick={() => select(id)}
             className={`tap44 shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
               active === id
-                ? 'grad-accent text-white shadow-md'
+                ? 'grad-brand text-white shadow-md'
                 : 'border border-border-subtle bg-input-bg text-txt-muted hover:text-txt-main'
             }`}
           >

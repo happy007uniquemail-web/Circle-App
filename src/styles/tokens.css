@@ -133,6 +133,22 @@
   --fuchsia-600: #c026d3;
   --sky-400: #38bdf8;
 
+  /* ── Circle brand motif (refinement pass) ─────────────────────────────
+     The logo's palette: coral-orange, red, green on navy. --brand-strong-grad
+     carries white text (AA-tuned stops); --brand-wash(-strong) tint the chrome;
+     --card-hairline highlights angular cards; --arc-* feed the circular arc. */
+  --brand-orange: #ef6b5a;
+  --brand-red: #e14b3f;
+  --brand-green: #5fbb70;
+  --brand-cream: #f8f1e1;
+  --brand-navy: #0f1b2d;
+  --brand-strong-grad: linear-gradient(115deg, #dd5a46, #c73a30 45%, #3f9e52);
+  --brand-wash: linear-gradient(115deg, rgba(239, 107, 90, 0.15), rgba(225, 75, 63, 0.11) 45%, rgba(95, 187, 112, 0.15));
+  --brand-wash-strong: linear-gradient(115deg, rgba(239, 107, 90, 0.28), rgba(225, 75, 63, 0.2) 42%, rgba(95, 187, 112, 0.26));
+  --card-hairline: linear-gradient(125deg, rgba(239, 107, 90, 0.65), rgba(225, 75, 63, 0.4) 45%, rgba(95, 187, 112, 0.55));
+  --arc-a: rgba(239, 107, 90, 0.22);
+  --arc-b: rgba(95, 187, 112, 0.16);
+
   /* ── Chrome ────────────────────────────────────────────────────────── */
   --scroll-thumb: #b9c2d6;
   --card-shadow: 0 10px 30px -12px rgba(30, 40, 90, 0.25);
@@ -295,6 +311,20 @@
   --btn-glow: rgba(98, 66, 224, 0.6);
   --btn-glow-hover: rgba(61, 90, 254, 0.5);
   --scrim: rgba(8, 10, 16, 0.72);
+
+  /* Brand motif, dark-tuned: brighter stops so the logo's orange/red/green
+     stay vivid on obsidian instead of muddying; washes run a touch higher. */
+  --brand-orange: #ff8a76;
+  --brand-red: #ff7a6c;
+  --brand-green: #7bd08a;
+  --brand-cream: #f8f1e1;
+  --brand-navy: #0a0a0c;
+  --brand-strong-grad: linear-gradient(115deg, #ef6b5a, #e14b3f 45%, #46a857);
+  --brand-wash: linear-gradient(115deg, rgba(255, 138, 118, 0.16), rgba(255, 122, 108, 0.12) 45%, rgba(123, 208, 138, 0.15));
+  --brand-wash-strong: linear-gradient(115deg, rgba(255, 138, 118, 0.26), rgba(255, 122, 108, 0.18) 42%, rgba(123, 208, 138, 0.22));
+  --card-hairline: linear-gradient(125deg, rgba(255, 138, 118, 0.7), rgba(255, 122, 108, 0.42) 45%, rgba(123, 208, 138, 0.6));
+  --arc-a: rgba(255, 138, 118, 0.45);
+  --arc-b: rgba(123, 208, 138, 0.32);
 
   --radius-pill: 9999px;
   --radius-panel: 28px;

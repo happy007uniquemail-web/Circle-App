@@ -47,6 +47,7 @@ const PostCard = ({ item, onChange }: { item: FeedItem; onChange?: () => void })
   const [draft, setDraft] = useState(item.post.body);
   const [reporting, setReporting] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDetailsElement>(null);
   // Close the post menu on outside click or Esc (UI-08).
   useEffect(() => {
@@ -96,7 +97,8 @@ const PostCard = ({ item, onChange }: { item: FeedItem; onChange?: () => void })
   }
 
   return (
-    <article className="card p-4 transition hover:border-slate-300 hover:shadow" aria-label={`Post by ${author.displayName}`}>
+    <article className={`cut-card ${menuOpen ? 'menu-open' : ''}`} aria-label={`Post by ${author.displayName}`}>
+      <div className="cut-inner post-arc p-4">
       {reposter && (
         <div className="mb-2 flex items-center gap-2 pl-1 text-xs font-medium text-slate-500">
           <Repeat2 size={14} className="text-emerald-600" />
@@ -108,7 +110,10 @@ const PostCard = ({ item, onChange }: { item: FeedItem; onChange?: () => void })
 
       <header className="flex items-start gap-3">
         <Link to={`/u/${author.username}`} aria-label={`${author.displayName}'s profile`}>
-          <Avatar src={author.avatarUrl} name={author.displayName} size={40} />
+          {/* Circular brand ring — the "Circle" identity mark on every post. */}
+          <span className="ring-brand">
+            <Avatar src={author.avatarUrl} name={author.displayName} size={40} />
+          </span>
         </Link>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-1.5">
@@ -153,6 +158,7 @@ const PostCard = ({ item, onChange }: { item: FeedItem; onChange?: () => void })
         <details
           ref={menuRef}
           className="relative"
+          onToggle={(e) => setMenuOpen(e.currentTarget.open)}
           onKeyDown={(e) => {
             if (e.key === 'Escape') menuRef.current?.removeAttribute('open');
           }}
@@ -221,7 +227,7 @@ const PostCard = ({ item, onChange }: { item: FeedItem; onChange?: () => void })
       )}
 
       {!editing && (
-        <footer className="mt-3 flex items-center gap-0.5 border-t border-slate-200 pt-2 text-slate-500 sm:gap-1">
+        <footer className="mt-3 flex items-center gap-0.5 border-t border-border-subtle pt-2 text-txt-subtle sm:gap-1">
           <LikeButton postId={post.id} count={post.likeCount} />
 
           {me && !isMine && (
@@ -291,6 +297,7 @@ const PostCard = ({ item, onChange }: { item: FeedItem; onChange?: () => void })
 
       {reporting && <ReportModal target="post" targetId={post.id} label="this post" onClose={() => setReporting(false)} />}
       {sharing && <ShareMenu post={post} onClose={() => setSharing(false)} />}
+      </div>
     </article>
   );
 };
