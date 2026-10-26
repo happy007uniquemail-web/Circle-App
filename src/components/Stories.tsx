@@ -10,6 +10,7 @@ import { compressImage, formatBytes } from '../lib/compress';
 import { activeStories, currentUserProfile, useActions, useAppState } from '../lib/store';
 import Avatar from './Avatar';
 import Modal, { useDialogA11y } from './Modal';
+import { StoryActionBar } from './StoryInteractions';
 import { toast } from './Toast';
 import VideoPlayer from './VideoPlayer';
 
@@ -31,6 +32,9 @@ export function StoryViewer({
   const [groupIdx, setGroupIdx] = useState(startIndex);
   const [segIdx, setSegIdx] = useState(segmentIndex);
   const [paused, setPaused] = useState(false);
+  // F-STO2: the comments modal freezes self-advance while it's open.
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const frozen = paused || commentsOpen;
   // UI-08: trap Tab inside the viewer and restore focus on close.
   const viewerRef = useRef<HTMLDivElement>(null);
   useDialogA11y(viewerRef, onClose);
@@ -41,11 +45,11 @@ export function StoryViewer({
 
   // Images/text auto-advance every 5 s; videos advance when playback ends.
   useEffect(() => {
-    if (!story || paused || story.kind === 'video') return;
+    if (!story || frozen || story.kind === 'video') return;
     const t = window.setTimeout(() => advance(1), 5000);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [story?.id, story?.kind, paused]);
+  }, [story?.id, story?.kind, frozen]);
 
   function advance(dir: 1 | -1) {
     if (!group) return onClose();
@@ -101,8 +105,8 @@ export function StoryViewer({
           {group.stories.map((s, i) => (
             <span key={s.id} className="h-1 flex-1 overflow-hidden rounded-full bg-white/30">
               <span
-                className={`block h-full rounded-full bg-white ${i === segIdx && !paused ? 'story-progress' : ''}`}
-                style={{ width: i < segIdx ? '100%' : i === segIdx ? (paused ? '40%' : undefined) : '0%' }}
+                className={`block h-full rounded-full bg-white ${i === segIdx && !frozen ? 'story-progress' : ''}`}
+                style={{ width: i < segIdx ? '100%' : i === segIdx ? (frozen ? '40%' : undefined) : '0%' }}
               />
             </span>
           ))}
@@ -163,6 +167,15 @@ export function StoryViewer({
           <button className={`absolute left-0 w-1/3 cursor-w-resize ${story.kind === 'video' ? 'top-0 bottom-12' : 'inset-y-0'}`} aria-label="Previous story" onClick={() => advance(-1)} />
           <button className={`absolute right-0 w-1/3 cursor-e-resize ${story.kind === 'video' ? 'top-0 bottom-12' : 'inset-y-0'}`} aria-label="Next story" onClick={() => advance(1)} />
         </div>
+
+        {/* F-STO2: reactions / reply / comments / repost strip (others only) */}
+        <StoryActionBar
+          story={story}
+          author={group.profile}
+          isMine={isMine}
+          onCloseViewer={onClose}
+          onCommentsChange={setCommentsOpen}
+        />
 
         <div className="mt-3 flex justify-between text-xs text-white/60">
           <span>{group.stories.length} segment{group.stories.length > 1 ? 's' : ''} · expires in {hoursLeft(story.expiresAt)}h</span>

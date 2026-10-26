@@ -39,6 +39,8 @@ import type {
   Result,
   Save,
   Story,
+  StoryComment,
+  StoryReaction,
   UserInterest,
 } from '../types';
 import { LIMITS } from '../types';
@@ -107,6 +109,14 @@ export interface DataProvider {
   setSuspended(userId: string, suspended: boolean): MaybePromise<Result>;
   createStory(input: StoryInput): MaybePromise<Result>;
   deleteStory(storyId: string): MaybePromise<Result>;
+  /** F-STO2: flip one of my emoji reactions on a story (❤️ heart included). */
+  toggleStoryReaction(storyId: string, emoji: string): MaybePromise<Result>;
+  /** F-STO2: comment on a live story (≤300 chars). */
+  addStoryComment(storyId: string, body: string): MaybePromise<Result>;
+  /** F-STO2: remove my comment (or my story's / admin). */
+  deleteStoryComment(commentId: string): MaybePromise<Result>;
+  /** F-STO2: repost someone's live story into my own story ring. */
+  repostStory(storyId: string): MaybePromise<Result>;
   startConversation(otherId: string): MaybePromise<ConversationResult>;
   sendMessage(conversationId: string, body: string, media: { kind: MediaKind; ref: string } | null, postId: string | null): MaybePromise<Result>;
   markConversationRead(conversationId: string): MaybePromise<Result>;
@@ -564,6 +574,40 @@ export function hasSaved(state: AppState, me: string | null, postId: string): bo
   if (!me) return false;
   return state.saves.some((s) => s.userId === me && s.postId === postId);
 }
+
+/* --- story interactions (F-STO2) --- */
+
+/** Emoji palette for story reactions — order = quick-bar order. */
+export const STORY_EMOJIS = ['❤️', '🔥', '😂', '😮', '😍', '👏'] as const;
+
+/** Per-emoji counts for one story (only count what I can see = everyone's). */
+export function storyReactionCounts(state: AppState, storyId: string): Partial<Record<string, number>> {
+  const counts: Partial<Record<string, number>> = {};
+  for (const r of state.storyReactions ?? []) {
+    if (r.storyId !== storyId) continue;
+    counts[r.emoji] = (counts[r.emoji] ?? 0) + 1;
+  }
+  return counts;
+}
+
+export function hasStoryReaction(state: AppState, me: string | null, storyId: string, emoji: string): boolean {
+  if (!me) return false;
+  return (state.storyReactions ?? []).some((r) => r.storyId === storyId && r.userId === me && r.emoji === emoji);
+}
+
+export function storyCommentsFor(state: AppState, storyId: string): StoryComment[] {
+  return (state.storyComments ?? [])
+    .filter((c) => c.storyId === storyId)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+/** True when I have a live story that is a repost of this one. */
+export function hasRepostedStory(state: AppState, me: string | null, storyId: string): boolean {
+  if (!me) return false;
+  return state.stories.some(
+    (s) => s.repostOf === storyId && s.userId === me && new Date(s.expiresAt).getTime() > Date.now(),
+  );
+}
 export function unreadCount(state: AppState, userId: string): number {
   return state.notifications.filter((n) => n.recipientId === userId && !n.isRead).length;
 }
@@ -617,6 +661,7 @@ export function threadMessages(state: AppState, conversationId: string): Message
 const EMPTY_STATE: AppState = {
   session: null, profiles: [], posts: [], comments: [], likes: [],
   follows: [], reposts: [], saves: [], blocks: [], stories: [],
+  storyReactions: [], storyComments: [],
   notifications: [], reports: [], conversations: [], messages: [], mutedNotifications: [],
 };
 
@@ -756,6 +801,20 @@ const mapStory = (r: Row): Story => ({
   caption: rs(r.caption),
   createdAt: rAt(r.created_at),
   expiresAt: rAt(r.expires_at),
+  repostOf: rOrNull(r.repost_of),
+});
+const mapStoryReaction = (r: Row): StoryReaction => ({
+  storyId: rs(r.story_id),
+  userId: rs(r.user_id),
+  emoji: rs(r.emoji),
+  createdAt: rAt(r.created_at),
+});
+const mapStoryComment = (r: Row): StoryComment => ({
+  id: rs(r.id),
+  storyId: rs(r.story_id),
+  authorId: rs(r.author_id),
+  body: rs(r.body),
+  createdAt: rAt(r.created_at),
 });
 const mapNotif = (r: Row): AppNotification => ({
   id: rs(r.id),
@@ -854,8 +913,8 @@ class SupabaseProvider implements DataProvider {
       return (data as Row[]) ?? [];
     };
     try {
-      const [profiles, posts, comments, follows, likes, saves, reposts, blocks, mutes, stories, notifications, reports, conversations, prefs, interestRows, userInterestRows, cabinRows, cabinInterestRows, cabinMemberRows, cabinRequestRows, cabinMessageRows] =
-        await Promise.all([
+      const [profiles, posts, comments, follows, likes, saves, reposts, blocks, mutes, stories, storyReactionRows, storyCommentRows, notifications, reports, conversations, prefs, interestRows, userInterestRows, cabinRows, cabinInterestRows, cabinMemberRows, cabinRequestRows, cabinMessageRows] =
+      await Promise.all([
           rows(sb.from('profiles').select('*').limit(5000)),
           rows(sb.from('posts').select('*').order('created_at', { ascending: false }).limit(1000)),
           rows(sb.from('comments').select('*').order('created_at', { ascending: false }).limit(2000)),
@@ -866,6 +925,8 @@ class SupabaseProvider implements DataProvider {
           rows(sb.from('blocks').select('*').limit(5000)),
           rows(sb.from('mutes').select('*').eq('muter_id', uid).limit(1000)), // PRV-08
           rows(sb.from('stories').select('*').limit(500)),
+          rows(sb.from('story_reactions').select('*').limit(5000)), // F-STO2
+          rows(sb.from('story_comments').select('*').order('created_at', { ascending: false }).limit(2000)), // F-STO2
           rows(sb.from('notifications').select('*').order('created_at', { ascending: false }).limit(300)),
           rows(sb.from('reports').select('*').order('created_at', { ascending: false }).limit(500)),
           rows(sb.from('conversations').select('*').order('created_at', { ascending: false }).limit(500)),
@@ -911,6 +972,8 @@ class SupabaseProvider implements DataProvider {
         cabinJoinRequests: cabinRequestRows.map(mapCabinRequest),
         cabinMessages: cabinMessageRows.map(mapCabinMessage).reverse(), // oldest → newest (parity with DMs)
         stories: stories.map(mapStory),
+        storyReactions: storyReactionRows.map(mapStoryReaction),
+        storyComments: storyCommentRows.map(mapStoryComment),
         notifications: notifications.map(mapNotif),
         mutedNotifications: (prefs[0]?.muted_types as string[] | undefined) ?? [],
         reports: reports.map(mapReport),
@@ -938,7 +1001,7 @@ class SupabaseProvider implements DataProvider {
     const uid = this.uid;
     if (!uid) return;
     const ch = this.sb.channel(`rt:${uid}`);
-    for (const table of ['messages', 'likes', 'follows', 'reposts', 'posts', 'comments', 'stories', 'profiles', 'cabin_messages', 'cabins', 'cabin_members', 'cabin_interests', 'cabin_join_requests'] as const) {
+    for (const table of ['messages', 'likes', 'follows', 'reposts', 'posts', 'comments', 'stories', 'story_reactions', 'story_comments', 'profiles', 'cabin_messages', 'cabins', 'cabin_members', 'cabin_interests', 'cabin_join_requests'] as const) {
       ch.on('postgres_changes', { event: '*', schema: 'public', table }, () => this.scheduleRefresh());
     }
     // NOT-05: notifications arrive filtered to this user's rows only.
@@ -1724,9 +1787,150 @@ class SupabaseProvider implements DataProvider {
     if (story.userId !== this.state.session!.id && this.me()?.role !== 'admin') return { ok: false, error: 'Not allowed.' };
     const { error } = await this.sb.from('stories').delete().eq('id', storyId);
     if (error) return { ok: false, error: friendlyError(error) };
-    void deleteMediaUrls([story.media]); // QTA-04: no orphans
+    // F-STO2: reposts reference the original story's media (or a copy that is
+    // their owner's concern) — never orphan-delete the shared object.
+    if (!story.repostOf) void deleteMediaUrls([story.media]); // QTA-04: no orphans
     this.commit({ stories: this.state.stories.filter((s) => s.id !== storyId) });
     return { ok: true };
+  }
+
+  /* --- story interactions (F-STO2) --- */
+
+  async toggleStoryReaction(storyId: string, emoji: string): Promise<Result> {
+    const guard = this.requireActive();
+    if (!guard.ok) return guard;
+    if (!(STORY_EMOJIS as readonly string[]).includes(emoji)) return { ok: false, error: 'Unknown reaction.' };
+    const story = this.state.stories.find((s) => s.id === storyId && new Date(s.expiresAt).getTime() > Date.now());
+    if (!story) return { ok: false, error: 'Story not found.' };
+    const meId = this.state.session!.id;
+    if (isBlockedPair(this.state, meId, story.userId)) return { ok: false, error: 'You cannot interact with this user.' };
+
+    const mine = (this.state.storyReactions ?? []).some(
+      (r) => r.storyId === storyId && r.userId === meId && r.emoji === emoji,
+    );
+    const before = this.state;
+    this.commit({
+      storyReactions: mine
+        ? (this.state.storyReactions ?? []).filter((r) => !(r.storyId === storyId && r.userId === meId && r.emoji === emoji))
+        : [{ storyId, userId: meId, emoji, createdAt: now() }, ...(this.state.storyReactions ?? [])],
+    });
+    try {
+      const { error } = mine
+        ? await this.sb
+            .from('story_reactions')
+            .delete()
+            .eq('story_id', storyId)
+            .eq('user_id', meId)
+            .eq('emoji', emoji)
+        : await this.sb.from('story_reactions').insert({ story_id: storyId, user_id: meId, emoji });
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      this.state = before; // roll back
+      this.emit();
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async addStoryComment(storyId: string, body: string): Promise<Result> {
+    const guard = this.requireActive();
+    if (!guard.ok) return guard;
+    const story = this.state.stories.find((s) => s.id === storyId && new Date(s.expiresAt).getTime() > Date.now());
+    if (!story) return { ok: false, error: 'Story not found.' };
+    const meId = this.state.session!.id;
+    if (isBlockedPair(this.state, meId, story.userId)) return { ok: false, error: 'You cannot interact with this user.' };
+    const text = body.trim();
+    if (!text || text.length > LIMITS.commentMax) {
+      return { ok: false, error: `Comments need 1–${LIMITS.commentMax} characters.` };
+    }
+    // lightweight duplicate guard so double-taps / spam don't stack
+    const dup = storyCommentsFor(this.state, storyId)
+      .some((c) => c.authorId === meId && c.body === text && Date.now() - new Date(c.createdAt).getTime() < 10 * 60_000);
+    if (dup) return { ok: false, error: 'Looks like you just sent that.' };
+    try {
+      const { data, error } = await this.sb
+        .from('story_comments')
+        .insert({ story_id: storyId, author_id: meId, body: text })
+        .select()
+        .single();
+      if (error) return { ok: false, error: friendlyError(error) };
+      this.commit({ storyComments: [mapStoryComment(data as Row), ...(this.state.storyComments ?? [])] });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: friendlyError(e) };
+    }
+  }
+
+  async deleteStoryComment(commentId: string): Promise<Result> {
+    const guard = this.requireAuth();
+    if (!guard.ok) return guard;
+    const comment = (this.state.storyComments ?? []).find((c) => c.id === commentId);
+    if (!comment) return { ok: false, error: 'Comment not found.' };
+    const meId = this.state.session!.id;
+    const story = this.state.stories.find((s) => s.id === comment.storyId);
+    const canDelete =
+      comment.authorId === meId || story?.userId === meId || this.me()?.role === 'admin';
+    if (!canDelete) return { ok: false, error: 'Not allowed.' };
+    const { error } = await this.sb.from('story_comments').delete().eq('id', commentId);
+    if (error) return { ok: false, error: friendlyError(error) };
+    this.commit({
+      storyComments: (this.state.storyComments ?? []).filter((c) => c.id !== commentId),
+    });
+    return { ok: true };
+  }
+
+  async repostStory(storyId: string): Promise<Result> {
+    const guard = this.requireActive();
+    if (!guard.ok) return guard;
+    const orig = this.state.stories.find((s) => s.id === storyId && new Date(s.expiresAt).getTime() > Date.now());
+    if (!orig) return { ok: false, error: 'Story not found.' };
+    const meId = this.state.session!.id;
+    if (orig.userId === meId) return { ok: false, error: 'You cannot repost your own story.' };
+    if (isBlockedPair(this.state, meId, orig.userId)) return { ok: false, error: 'You cannot interact with this user.' };
+    const already = this.state.stories.some(
+      (s) => s.repostOf === storyId && s.userId === meId && new Date(s.expiresAt).getTime() > Date.now(),
+    );
+    if (already) return { ok: false, error: 'You already reposted this story.' };
+
+    const author = profileById(this.state, orig.userId);
+    const prefix = author?.username ? `↻ @${author.username}` : '↻ reposted';
+    const caption = `${prefix}${orig.caption ? `: ${orig.caption}` : ''}`.slice(0, LIMITS.storyCaptionMax);
+
+    try {
+      // Copy the media object into my own storage so the repost survives the
+      // original being deleted; on any failure fall back to sharing the URL.
+      let media = orig.media;
+      if (media && orig.kind !== 'text') {
+        try {
+          const blob = await (await fetch(media)).blob();
+          const objUrl = URL.createObjectURL(blob);
+          try {
+            media = await uploadRef(objUrl, orig.kind === 'video' ? 'media' : 'post-images', meId);
+          } finally {
+            URL.revokeObjectURL(objUrl);
+          }
+        } catch (err) {
+          console.error('[circle] story media copy failed (sharing original URL):', err);
+        }
+      }
+      const { data, error } = await this.sb
+        .from('stories')
+        .insert({
+          user_id: meId,
+          kind: orig.kind,
+          media,
+          caption,
+          expires_at: new Date(Date.now() + LIMITS.storyTtlMs).toISOString(),
+          repost_of: orig.id,
+        })
+        .select()
+        .single();
+      if (error) return { ok: false, error: friendlyError(error) };
+      this.commit({ stories: [mapStory(data as Row), ...this.state.stories] });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: friendlyError(e) };
+    }
   }
 
   /* --- direct messaging (F-DM) --- */

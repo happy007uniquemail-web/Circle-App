@@ -13,7 +13,9 @@ export type NotifType =
   | 'cabin_join_request'
   | 'cabin_request_approved'
   | 'cabin_request_declined'
-  | 'cabin_invite';
+  | 'cabin_invite'
+  | 'story_reaction'
+  | 'story_comment';
 export type ReportTarget = 'post' | 'comment' | 'user' | 'cabin' | 'cabin_message'; // CHT-12: cabin reporting
 export type ReportReason = 'spam' | 'harassment' | 'hate' | 'nsfw' | 'other';
 export type ReportStatus = 'open' | 'dismissed' | 'actioned';
@@ -153,6 +155,25 @@ export interface Story {
   caption: string; // ≤200 chars
   createdAt: string;
   expiresAt: string;
+  /** F-STO2: present when this story is a repost of another story. */
+  repostOf?: string | null;
+}
+
+/** Row of `story_reactions` — one user's emoji on one story (F-STO2). */
+export interface StoryReaction {
+  storyId: string;
+  userId: string;
+  emoji: string;
+  createdAt: string;
+}
+
+/** Row of `story_comments` — a comment on an ephemeral story (F-STO2). */
+export interface StoryComment {
+  id: string;
+  storyId: string;
+  authorId: string;
+  body: string; // 1–300 chars
+  createdAt: string;
 }
 
 export interface AppNotification {
@@ -294,6 +315,10 @@ export interface AppState {
   cabinJoinRequests?: CabinJoinRequest[];
   cabinMessages?: CabinMessage[];
   stories: Story[];
+  /** F-STO2: reactions across all visible live stories. */
+  storyReactions?: StoryReaction[];
+  /** F-STO2: comments on visible live stories. */
+  storyComments?: StoryComment[];
   notifications: AppNotification[];
   /** Muted notification types for the signed-in user (NOT-09). */
   mutedNotifications: string[];

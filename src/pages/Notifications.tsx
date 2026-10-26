@@ -21,6 +21,8 @@ const ICONS: Record<string, { Icon: typeof Heart; cls: string }> = {
   cabin_request_approved: { Icon: HandHeart, cls: 'bg-emerald-50 text-emerald-600' },
   cabin_request_declined: { Icon: HandHeart, cls: 'bg-red-50 text-red-600' },
   cabin_invite: { Icon: HandHeart, cls: 'bg-purple-50 text-purple-600' },
+  story_reaction: { Icon: Heart, cls: 'bg-rose-50 text-rose-600' },
+  story_comment: { Icon: MessageCircle, cls: 'bg-emerald-50 text-emerald-600' },
 };
 
 function describe(type: string): string {
@@ -47,6 +49,10 @@ function describe(type: string): string {
       return 'declined your cabin request';
     case 'cabin_invite':
       return 'invited you to a cabin';
+    case 'story_reaction':
+      return 'reacted to your story';
+    case 'story_comment':
+      return 'commented on your story';
     default:
       return 'interacted with you';
   }

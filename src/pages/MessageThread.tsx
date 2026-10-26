@@ -38,6 +38,11 @@ export default function MessageThread() {
   const sharedPostId = shareParam?.startsWith('post:') ? shareParam.slice(5) : null;
   const sharedPost = sharedPostId ? state.posts.find((p) => p.id === sharedPostId && !p.deletedAt) : null;
 
+  // F-STO2: story reply via the story viewer bar (`?story=<id>`).
+  const replyStoryId = params.get('story');
+  const replyStory = replyStoryId ? state.stories.find((s) => s.id === replyStoryId) ?? null : null;
+  const replyAuthor = replyStory ? profileById(state, replyStory.userId) : null;
+
   // Opening the thread marks incoming messages read; messages that arrive
   // while it's open are stamped on arrival too.
   useEffect(() => {
@@ -92,17 +97,29 @@ export default function MessageThread() {
     setParams(next, { replace: true });
   }
 
+  function clearReply() {
+    const next = new URLSearchParams(params);
+    next.delete('story');
+    setParams(next, { replace: true });
+  }
+
   async function send(e?: FormEvent) {
     e?.preventDefault();
     setBusy(true);
     const media = photo ? { kind: 'image' as const, ref: photo } : video ? { kind: 'video' as const, ref: video } : null;
-    const r = await actions.sendMessage(id!, body, media, sharedPostId);
+    // F-STO2: a story reply quotes the story as the first line of the DM.
+    const quote = replyStory
+      ? `↪ Reply to ${replyAuthor?.displayName ?? 'a'}'s story${replyStory.caption ? ` — “${replyStory.caption.slice(0, 120)}”` : ''}`
+      : null;
+    const text = quote && body.trim() ? `${quote}\n${body}` : (quote ?? body);
+    const r = await actions.sendMessage(id!, text, media, sharedPostId);
     setBusy(false);
     if (!r.ok) return toast(r.error ?? 'Could not send.', 'error');
     setBody('');
     setPhoto(null);
     setVideo(null);
     if (sharedPostId) clearShare();
+    if (replyStory) clearReply();
   }
 
   return (
@@ -178,6 +195,25 @@ export default function MessageThread() {
         <div ref={bottomRef} />
       </ul>
 
+      {replyStory && (
+        <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] p-2.5 text-sm backdrop-blur-md">
+          <span aria-hidden>↪</span>
+          <span className="min-w-0 flex-1">
+            <b className="block text-xs uppercase tracking-wide text-brand-600">
+              Replying to {replyAuthor?.displayName ?? 'story'}
+            </b>
+            <span className="line-clamp-1 text-slate-600">{replyStory.caption || '(photo / video story)'}</span>
+          </span>
+          <button
+            onClick={clearReply}
+            aria-label="Cancel story reply"
+            className="tap44 rounded-full p-1.5 text-slate-400 hover:bg-white/[0.06]"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       {(photo || video || sharedPost) && (
         <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 text-sm backdrop-blur-md">
           <span className="min-w-0 flex-1">
@@ -231,7 +267,7 @@ export default function MessageThread() {
         />
         <button
           type="submit"
-          disabled={busy || (!body.trim() && !photo && !video && !sharedPostId)}
+          disabled={busy || (!body.trim() && !photo && !video && !sharedPostId && !replyStory)}
           className="btn-primary aspect-square !rounded-full px-3.5"
           aria-label="Send message"
         >
