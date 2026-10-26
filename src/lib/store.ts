@@ -1754,12 +1754,21 @@ class SupabaseProvider implements DataProvider {
 
     try {
       const { data: conv, error } = await this.sb.from('conversations').insert({}).select().single();
-      if (error) return { ok: false, error: friendlyError(error) };
+      if (error) {
+        console.error('[circle] conversation insert failed:', error);
+        return { ok: false, error: friendlyError(error) };
+      }
       const cid = rs(conv.id);
       const first = await this.sb.from('conversation_members').insert({ conversation_id: cid, user_id: meId });
-      if (first.error) return { ok: false, error: friendlyError(first.error) };
+      if (first.error) {
+        console.error('[circle] own member insert failed:', first.error);
+        return { ok: false, error: friendlyError(first.error) };
+      }
       const second = await this.sb.from('conversation_members').insert({ conversation_id: cid, user_id: otherId });
-      if (second.error) return { ok: false, error: friendlyError(second.error) };
+      if (second.error) {
+        console.error('[circle] other member insert failed:', second.error);
+        return { ok: false, error: friendlyError(second.error) };
+      }
       const conversation: Conversation = { id: cid, memberIds: [meId, otherId], createdAt: now() };
       this.commit({ conversations: [conversation, ...this.state.conversations] });
       return { ok: true, conversationId: cid };

@@ -130,7 +130,7 @@ export function friendlyError(e: unknown): string {
     return 'That file is larger than this project’s upload limit — try a smaller file.';
   }
   if (/mime|content.?type/i.test(raw)) return 'That file type isn’t allowed here.';
-  if (/row-level security/i.test(raw)) return 'You do not have permission to do that.';
+  if (/row-level security/i.test(raw)) return `Permission denied by the database — ${raw}`;
   if (/failed to fetch|networkerror|load failed/i.test(raw)) return 'Network error — check your connection and try again.';
   return raw || 'Something went wrong. Please try again.';
 }
