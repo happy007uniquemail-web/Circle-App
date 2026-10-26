@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom';
+import LogoMark from '../components/LogoMark';
 
 function DocShell({ title, updated, children }: { title: string; updated: string; children: React.ReactNode }) {
   return (
     <div className="min-h-dvh">
       <header className="mx-auto flex h-16 max-w-3xl items-center justify-between px-4">
         <Link to="/" className="flex items-center gap-2 font-bold">
-          <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-800 text-white shadow-md shadow-black/40">C</span> Circle
+          <LogoMark size={32} /> Circle
         </Link>
         <Link to="/" className="text-sm font-medium text-slate-500 hover:text-slate-900">← Back</Link>
       </header>

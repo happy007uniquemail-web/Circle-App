@@ -19,6 +19,7 @@ import Avatar from './Avatar';
 import { ConfirmHost } from './ConfirmDialog';
 import FeedFilter from './FeedFilter';
 import FeedTabs from './FeedTabs';
+import LogoMark from './LogoMark';
 import NotificationBell from './NotificationBell';
 import RightDrawer from './RightDrawer';
 import SearchBox from './SearchBox';
@@ -42,9 +43,7 @@ function Brand() {
       aria-label="Circle home"
       className="flex shrink-0 items-center gap-2 text-lg font-bold tracking-tight text-txt-main"
     >
-      <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-800 text-white shadow-md">
-        C
-      </span>
+      <LogoMark size={32} />
       <span className="hidden sm:inline">Circle</span>
     </NavLink>
   );

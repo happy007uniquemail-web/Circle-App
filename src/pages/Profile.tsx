@@ -3,6 +3,7 @@ import { Ban, Bell, BellOff, CalendarDays, Check, Flag, Lock, MessageCircle, Set
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import Avatar from '../components/Avatar';
 import FollowButton from '../components/FollowButton';
+import HobbiesSection from '../components/HobbiesSection';
 import InfiniteFeed, { useInfiniteFeed } from '../components/InfiniteFeed';
 import ReportModal from '../components/ReportModal';
 import { confirmAction } from '../components/ConfirmDialog';
@@ -123,48 +124,82 @@ export default function Profile() {
     toast(accept ? 'Follow request approved.' : 'Follow request declined.', 'success');
   }
 
+  // Brand palette (mirrors the logo): navy #0F1B2D · coral #EF6B5A ·
+  // green #5FBB70 · cream #F8F1E1. Decorative shapes only — no artwork.
+  const hobbies = showTags ? tags.map((t) => ({ id: t.id, name: t.name })) : [];
+
   return (
     <div className="space-y-4">
-      <header className="card p-5">
-        <div className="flex items-start gap-4">
-          <Avatar src={profile.avatarUrl} name={profile.displayName} size={72} />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-bold">{profile.displayName}</h1>
-              {profile.role === 'admin' && (
-                <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-700">admin</span>
-              )}
-              {profile.isSuspended && (
-                <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">suspended</span>
-              )}
-            </div>
-            <p className="text-sm text-slate-500">@{profile.username}</p>
-            {profile.bio && <p className="mt-2 text-[15px] leading-relaxed">{profile.bio}</p>}
-            {tags.length > 0 && (
-              <ul className="mt-2.5 flex flex-wrap gap-1.5" aria-label="Interests">
-                {tags.map((i) => (
-                  <li key={i.id} className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
-                    {i.name}
-                  </li>
-                ))}
-              </ul>
+      <section aria-label="Profile" className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        {/* Identity banner — deep navy with the brand's 4-colour accents */}
+        <div className="relative bg-[#0F1B2D] px-5 pb-14 pt-6 text-[#F8F1E1]">
+          <span aria-hidden className="pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full border-4 border-[#EF6B5A]/70" />
+          <span aria-hidden className="pointer-events-none absolute -left-6 top-3 h-2.5 w-2.5 rounded-full bg-[#5FBB70]" />
+          <span aria-hidden className="pointer-events-none absolute left-16 top-9 h-1.5 w-1.5 rounded-full bg-[#F8F1E1]/70" />
+          <span aria-hidden className="pointer-events-none absolute right-24 top-6 h-2 w-2 rounded-full bg-[#F8F1E1]/50" />
+          <span aria-hidden className="pointer-events-none absolute bottom-3 left-10 select-none text-lg font-black text-[#EF6B5A]/80">✦</span>
+          <div className="relative flex flex-wrap items-center gap-1.5">
+            <span className="rounded-full bg-[#EF6B5A] px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide">Circle</span>
+            <span className="rounded-full bg-[#5FBB70] px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-[#0F1B2D]">member</span>
+            {profile.role === 'admin' && (
+              <span className="rounded-full bg-[#F8F1E1] px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-[#0F1B2D]">admin</span>
             )}
-            {showJoin && (
-              <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
-                <CalendarDays size={13} /> Joined {new Date(profile.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-              </p>
+            {profile.isSuspended && (
+              <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-red-700">suspended</span>
             )}
           </div>
-          <div className="flex shrink-0 flex-col gap-2">
+        </div>
+
+        {/* Avatar straddles banner and body */}
+        <div className="relative px-5">
+          <div className="-mt-9 flex w-fit rounded-full bg-white p-1 shadow-md ring-2 ring-[#EF6B5A]/40">
+            <span className="rounded-full ring-2 ring-[#5FBB70]/60">
+              <Avatar src={profile.avatarUrl} name={profile.displayName} size={84} />
+            </span>
+          </div>
+        </div>
+
+        <div className="px-5 pb-5">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <h1 className="text-xl font-black tracking-tight text-[#0F1B2D]">{profile.displayName}</h1>
+            <span className="rounded-full bg-[#E7EDF6] px-2.5 py-0.5 text-xs font-semibold text-[#2A3F5C]">
+              @{profile.username}
+            </span>
+          </div>
+          {profile.bio && (
+            <p className="mt-2 border-l-[3px] border-[#EF6B5A] pl-3 text-[15px] leading-relaxed text-slate-700">{profile.bio}</p>
+          )}
+          {showJoin && (
+            <p className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-[#F8F1E1] px-2.5 py-1 text-xs font-medium text-[#7A5B24]">
+              <CalendarDays size={13} /> Joined{' '}
+              {new Date(profile.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+            </p>
+          )}
+
+          {/* Stats — one chip per brand colour, tappable */}
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            <Stat colour="coral" label="Posts" value={myPosts.length} active={tab === 'posts'} onClick={() => { setTab('posts'); setLimit(PAGE); }} />
+            <Stat colour="green" label="Followers" value={followerCount(state, profile.id)} active={tab === 'followers'} onClick={() => { setTab('followers'); setLimit(PAGE); }} />
+            <Stat colour="cream" label="Following" value={followingCount(state, profile.id)} active={tab === 'following'} onClick={() => { setTab('following'); setLimit(PAGE); }} />
+          </div>
+
+          {/* Actions */}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             {isMe ? (
-              <Link to="/settings" className="btn-ghost border border-white/15 bg-white/[0.05]">
+              <Link
+                to="/settings"
+                className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#0F1B2D] px-4 text-sm font-semibold text-[#F8F1E1] shadow-sm transition hover:opacity-90"
+              >
                 <Settings size={15} /> Edit profile
               </Link>
             ) : (
               me && (
                 <>
                   {canMessageMe && (
-                    <button onClick={messageUser} className="btn-ghost border border-white/15 bg-white/[0.05]">
+                    <button
+                      onClick={messageUser}
+                      className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#EF6B5A] px-4 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+                    >
                       <MessageCircle size={15} /> Message
                     </button>
                   )}
@@ -173,31 +208,28 @@ export default function Profile() {
               )
             )}
             {me && !isMe && (
-              <div className="flex justify-center gap-1">
-                <button onClick={() => setReporting(true)} aria-label="Report this user" className="tap44 rounded-full p-2 text-slate-400 hover:bg-white/[0.06]">
+              <div className="flex gap-1">
+                <button onClick={() => setReporting(true)} aria-label="Report this user" className="tap44 rounded-full p-2 text-slate-400 hover:bg-slate-50">
                   <Flag size={15} />
                 </button>
-                <button onClick={() => void toggleMute()} aria-label={isMuted ? 'Unmute this user' : 'Mute this user'} className="tap44 rounded-full p-2 text-slate-400 hover:bg-white/[0.06]">
+                <button onClick={() => void toggleMute()} aria-label={isMuted ? 'Unmute this user' : 'Mute this user'} className="tap44 rounded-full p-2 text-slate-400 hover:bg-slate-50">
                   {isMuted ? <BellOff size={15} /> : <Bell size={15} />}
                 </button>
-                <button onClick={blockUser} aria-label="Block this user" className="tap44 rounded-full p-2 text-slate-400 hover:bg-red-50 hover:text-red-600">
+                <button onClick={blockUser} aria-label="Block this user" className="tap44 rounded-full p-2 text-slate-400 hover:bg-red-50 hover:text-[#B23A2B]">
                   <Ban size={15} />
                 </button>
               </div>
             )}
           </div>
+          {me && following && !isMe && <p className="mt-2 text-xs text-slate-400">You follow @{profile.username}</p>}
+          {me && requested && !isMe && (
+            <p className="mt-2 text-xs text-slate-400">Request sent — @{profile.username} hasn’t approved it yet.</p>
+          )}
         </div>
+      </section>
 
-        <div className="mt-4 flex gap-5 border-t border-slate-100 pt-3 text-sm">
-          <Stat label="Posts" value={myPosts.length} active={tab === 'posts'} onClick={() => { setTab('posts'); setLimit(PAGE); }} />
-          <Stat label="Followers" value={followerCount(state, profile.id)} active={tab === 'followers'} onClick={() => { setTab('followers'); setLimit(PAGE); }} />
-          <Stat label="Following" value={followingCount(state, profile.id)} active={tab === 'following'} onClick={() => { setTab('following'); setLimit(PAGE); }} />
-        </div>
-        {me && following && !isMe && <p className="mt-2 text-xs text-slate-400">You follow @{profile.username}</p>}
-        {me && requested && !isMe && (
-          <p className="mt-2 text-xs text-slate-400">Request sent — @{profile.username} hasn’t approved it yet.</p>
-        )}
-      </header>
+      {/* Interests live under a collapsible, adaptive Hobbies card */}
+      <HobbiesSection hobbies={hobbies} />
 
       {/* PRV-03: my pending follow requests, with approve/decline. */}
       {isMe && requestProfiles.length > 0 && (
@@ -299,10 +331,24 @@ export default function Profile() {
   );
 }
 
-function Stat({ label, value, active, onClick }: { label: string; value: number; active: boolean; onClick: () => void }) {
+type StatColour = 'coral' | 'green' | 'cream';
+
+const STAT_STYLES: Record<StatColour, { base: string; active: string }> = {
+  coral: { base: 'bg-[#FCE9E4] text-[#B23A2B]', active: 'bg-[#EF6B5A] text-white shadow-md' },
+  green: { base: 'bg-[#E4F5E9] text-[#1E7A3C]', active: 'bg-[#5FBB70] text-[#0F1B2D] shadow-md' },
+  cream: { base: 'bg-[#F8F1E1] text-[#7A5B24]', active: 'bg-[#F8F1E1] text-[#0F1B2D] shadow-md ring-1 ring-[#E3D2A6]' },
+};
+
+function Stat({ colour, label, value, active, onClick }: { colour: StatColour; label: string; value: number; active: boolean; onClick: () => void }) {
+  const s = STAT_STYLES[colour];
   return (
-    <button onClick={onClick} className={`rounded-lg px-2 py-1 -mx-2 transition hover:bg-white/[0.06] ${active ? 'font-bold text-slate-900' : 'text-slate-500'}`}>
-      <b>{value}</b> <span className="font-normal">{label}</span>
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      className={`flex min-h-11 flex-col items-center justify-center rounded-2xl px-2 py-1.5 text-center transition hover:opacity-90 ${active ? s.active : s.base}`}
+    >
+      <b className="text-base leading-none">{value}</b>
+      <span className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide opacity-80">{label}</span>
     </button>
   );
 }

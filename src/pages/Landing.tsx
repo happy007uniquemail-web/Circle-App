@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import LogoMark from '../components/LogoMark';
 import { MessageCircle, Search, Sparkles, Heart, Loader2 } from 'lucide-react';
 import { currentUserProfile, useActions, useAppState } from '../lib/store';
 
@@ -71,7 +72,7 @@ export default function Landing() {
     <div className="min-h-dvh">
       <header className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4">
         <span className="flex items-center gap-2 text-lg font-bold">
-          <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-800 text-white shadow-md shadow-black/40">C</span>
+          <LogoMark size={32} />
           Circle
         </span>
         <nav className="flex items-center gap-4 text-sm font-medium text-slate-600">

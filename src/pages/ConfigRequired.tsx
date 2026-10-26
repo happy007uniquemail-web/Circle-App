@@ -2,12 +2,14 @@
  * Rendered by the entry point when the build has no Supabase credentials.
  * Keeps official mode strict: there is no offline/demo fallback.
  */
+import LogoMark from '../components/LogoMark';
+
 export default function ConfigRequired() {
   return (
     <main className="grid min-h-dvh place-items-center p-6">
       <div className="glass w-full max-w-lg rounded-3xl border p-8">
-        <div className="mb-4 grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-800 font-bold text-white shadow-md shadow-black/40">
-          C
+        <div className="mb-4">
+          <LogoMark size={40} />
         </div>
         <h1 className="text-xl font-bold">Backend not configured</h1>
         <p className="mt-2 text-sm text-slate-600">

@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import ImageUploader from '../components/ImageUploader';
 import InterestPicker from '../components/InterestPicker';
 import { toast } from '../components/Toast';
+import LogoMark from '../components/LogoMark';
 import { avatarFor, isValidUsername } from '../lib/format';
 import { currentUserProfile, useActions, useAppState } from '../lib/store';
 import { LIMITS } from '../types';
@@ -74,7 +75,7 @@ export default function Onboarding() {
     return (
       <div className="min-h-dvh">
         <header className="mx-auto flex h-16 max-w-lg items-center gap-2 px-4">
-          <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-800 text-white shadow-md shadow-black/40">C</span>
+          <LogoMark size={32} />
           <span className="font-bold">Welcome to Circle, {me.displayName.split(' ')[0]}</span>
         </header>
 
@@ -116,7 +117,7 @@ export default function Onboarding() {
   return (
     <div className="min-h-dvh">
       <header className="mx-auto flex h-16 max-w-lg items-center gap-2 px-4">
-        <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-800 text-white shadow-md shadow-black/40">C</span>
+        <LogoMark size={32} />
         <span className="font-bold">Welcome to Circle, {me.displayName.split(' ')[0]}</span>
       </header>
 
