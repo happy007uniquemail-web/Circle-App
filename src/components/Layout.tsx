@@ -241,7 +241,7 @@ export default function Layout() {
   }>;
 
   return (
-    <div className="flex min-h-screen flex-col wide:p-[var(--panel-pad)]">
+    <div className="flex h-dvh flex-col overflow-hidden wide:p-[var(--panel-pad)]">
       {/* The single glass "window" over the wallpaper (§5.1): full-bleed with
           no radius below 1200px (mobile/tablet), centred with margins at wide. */}
       <div className="glass relative mx-auto flex min-h-0 w-full max-w-[var(--panel-max)] flex-1 flex-col rounded-none border-0 pt-[env(safe-area-inset-top)] wide:rounded-3xl wide:border">
